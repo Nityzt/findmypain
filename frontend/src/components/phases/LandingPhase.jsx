@@ -30,41 +30,62 @@ function Typewriter({ text, speed = 28, onDone }) {
 }
 
 export default function LandingPhase() {
-  const { startSession, isSpeaking, introMessage } = useVapi()
+  const { startSession, isSpeaking, introMessage, voiceError, micPermission } = useVapi()
   const { setPhase } = useSession()
   const [showPrompt,     setShowPrompt]     = useState(false)
   const [showTypewriter, setShowTypewriter] = useState(false)
+  const [introPlayed,    setIntroPlayed]    = useState(false)
   const started = useRef(false)
 
   useEffect(() => {
     if (started.current) return
     started.current = true
 
-    const t = setTimeout(async () => {
-      if (!process.env.NEXT_PUBLIC_VAPI_API_KEY) {
+    const timer = setTimeout(() => {
+      const apiKey =
+        process.env.NEXT_PUBLIC_VAPI_API_KEY ||
+        process.env.NEXT_PUBLIC_VAPI_PUBLIC_KEY ||
+        ''
+
+      if (!apiKey) {
+        // No Vapi key — show typewriter fallback after short delay
         setShowTypewriter(true)
         return
       }
-      await startSession({ isIntro: true })
-      // show prompt 4s after session starts (intro runs ~3s)
-      setTimeout(() => setShowPrompt(true), 4000)
-    }, 900)
 
-    return () => clearTimeout(t)
-  }, [startSession])
+      setShowPrompt(true)
+    }, 1000)
 
-  // Also show prompt once Vapi stops speaking
+    return () => clearTimeout(timer)
+  }, [])
+
+  // Also show prompt once the intro finishes speaking
   useEffect(() => {
-    if (isSpeaking) return
+    if (!introPlayed || isSpeaking) return
     const t = setTimeout(() => setShowPrompt(true), 1200)
     return () => clearTimeout(t)
-  }, [isSpeaking])
+  }, [introPlayed, isSpeaking])
 
   const canClick = showPrompt || showTypewriter
 
+  const handleLandingClick = async () => {
+    if (showTypewriter || introPlayed) {
+      setPhase(PHASES.INTAKE)
+      return
+    }
+
+    setShowPrompt(false)
+    const started = await startSession({ isIntro: true })
+    if (started) {
+      setIntroPlayed(true)
+    } else {
+      setShowPrompt(true)
+    }
+  }
+
   return (
     <div
-      onClick={() => canClick && setPhase(PHASES.INTAKE)}
+      onClick={() => { if (showPrompt || showTypewriter) handleLandingClick() }}
       style={{
         position: 'absolute', inset: 0, zIndex: 10,
         display: 'flex', flexDirection: 'column',
@@ -146,8 +167,18 @@ export default function LandingPhase() {
             fontSize: '11px', color: 'rgba(160,200,220,0.6)',
             letterSpacing: '0.2em', fontWeight: 400,
           }}>
-            tap to begin
+            {introPlayed || showTypewriter ? 'tap to begin' : 'enable microphone'}
           </span>
+          {micPermission === 'prompt' && !introPlayed && !showTypewriter && (
+            <span style={{ fontSize: '10px', color: '#5a90b0', fontFamily: 'monospace', letterSpacing: '0.08em' }}>
+              Browser will ask for permission
+            </span>
+          )}
+          {voiceError && (
+            <span style={{ maxWidth: '320px', textAlign: 'center', fontSize: '11px', color: '#ef4444', fontFamily: 'monospace', letterSpacing: '0.04em' }}>
+              {voiceError}
+            </span>
+          )}
         </div>
       )}
     </div>

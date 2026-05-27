@@ -4,7 +4,7 @@ import { createContext, useContext, useRef, useState, useCallback } from 'react'
 
 const VapiContext = createContext(null)
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8080'
+const API_BASE = normalizeApiBase(process.env.NEXT_PUBLIC_API_BASE_URL)
 
 function buildSystemPrompt(intake, painPoints) {
   const pts = painPoints.map((p) => `${p.region} (${p.severity})`).join(', ') || 'none selected yet'
@@ -32,6 +32,23 @@ Start by briefly acknowledging the pain regions selected and asking the most imp
 const INTRO_MESSAGE =
   "Hi, I'm here to find your pain — select your pain points by clicking on the body and I'll ask you a few questions."
 
+function normalizeApiBase(value) {
+  if (!value || value.startsWith('/')) return 'http://localhost:8080'
+  return value
+}
+
+function getVapiPublicKey() {
+  return (
+    process.env.NEXT_PUBLIC_VAPI_API_KEY ||
+    process.env.NEXT_PUBLIC_VAPI_PUBLIC_KEY ||
+    ''
+  )
+}
+
+function getVapiAssistantId() {
+  return process.env.NEXT_PUBLIC_VAPI_ASSISTANT_ID || ''
+}
+
 export function VapiProvider({ children }) {
   const vapiRef   = useRef(null)
   const activeRef = useRef(false) // prevent duplicate sessions
@@ -43,12 +60,42 @@ export function VapiProvider({ children }) {
   const [transcript,   setTranscript]   = useState('')
   // Last completed utterance from either side — ChatPanel subscribes to sync chat history
   const [lastMessage,  setLastMessage]  = useState(null) // { role: 'user'|'assistant', content }
+  const [micPermission, setMicPermission] = useState('prompt')
+  const [voiceError, setVoiceError] = useState('')
+
+  const requestMicrophone = useCallback(async () => {
+    if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
+      setMicPermission('unsupported')
+      setVoiceError('Microphone access is not supported in this browser.')
+      return false
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      stream.getTracks().forEach((track) => track.stop())
+      setMicPermission('granted')
+      setVoiceError('')
+      return true
+    } catch (err) {
+      const denied = err?.name === 'NotAllowedError' || err?.name === 'PermissionDeniedError'
+      setMicPermission(denied ? 'denied' : 'error')
+      setVoiceError(
+        denied
+          ? 'Microphone permission was denied. Enable mic access in your browser settings and try again.'
+          : 'Could not access your microphone. Check your input device and try again.'
+      )
+      return false
+    }
+  }, [])
 
   // Lazily load the Vapi SDK — returns null if no API key configured
   const getVapi = useCallback(async () => {
     if (vapiRef.current) return vapiRef.current
-    const apiKey = process.env.NEXT_PUBLIC_VAPI_API_KEY || ''
-    if (!apiKey) return null
+    const apiKey = getVapiPublicKey()
+    if (!apiKey) {
+      setVoiceError('Missing NEXT_PUBLIC_VAPI_API_KEY or NEXT_PUBLIC_VAPI_PUBLIC_KEY.')
+      return null
+    }
     const { default: Vapi } = await import('@vapi-ai/web')
     const instance = new Vapi(apiKey)
     vapiRef.current = instance
@@ -58,8 +105,14 @@ export function VapiProvider({ children }) {
   // Re-attach listeners before each session (cleans up stale handlers)
   const attachEvents = useCallback((vapi) => {
     vapi.removeAllListeners?.()
-    vapi.on('speech-start', () => setIsSpeaking(true))
-    vapi.on('speech-end',   () => setIsSpeaking(false))
+    vapi.on('speech-start', () => {
+      setIsSpeaking(true)
+      setIsListening(false)
+    })
+    vapi.on('speech-end',   () => {
+      setIsSpeaking(false)
+      if (activeRef.current) setIsListening(true)
+    })
     vapi.on('call-start',   () => { setIsConnected(true); setIsListening(true); setHasVapi(true) })
     vapi.on('call-end',     () => {
       setIsConnected(false); setIsListening(false); setIsSpeaking(false)
@@ -67,6 +120,7 @@ export function VapiProvider({ children }) {
     })
     vapi.on('error', (err) => {
       console.warn('[Vapi] session error:', err?.message || err)
+      setVoiceError(err?.message || 'Voice session failed. Try again.')
       setIsConnected(false); setIsListening(false); setIsSpeaking(false)
       activeRef.current = false
     })
@@ -82,11 +136,16 @@ export function VapiProvider({ children }) {
   }, [])
 
   const startSession = useCallback(async ({ intake = {}, painPoints = [], isIntro = false } = {}) => {
-    if (activeRef.current) return   // already in a session
+    if (activeRef.current) return true   // already in a session
+    setVoiceError('')
+
+    const hasMic = await requestMicrophone()
+    if (!hasMic) return false
+
     const vapi = await getVapi()
     if (!vapi) {
       console.info('[Vapi] No API key — text-only mode.')
-      return
+      return false
     }
 
     // Fully stop any prior call and wait a tick so call-end events settle
@@ -103,7 +162,7 @@ Do not ask any follow-up questions yet.`
       : buildSystemPrompt(intake, painPoints)
 
     try {
-      await vapi.start({
+      const assistantConfig = {
         name: 'FindMyPain AI',
         // firstMessage tells Vapi to speak this immediately without waiting for user input
         firstMessage: isIntro ? INTRO_MESSAGE : undefined,
@@ -120,12 +179,22 @@ Do not ask any follow-up questions yet.`
           provider: '11labs',
           voiceId: '21m00Tcm4TlvDq8ikWAM', // Rachel
         },
-      })
+      }
+
+      const assistantId = getVapiAssistantId()
+      if (assistantId) {
+        await vapi.start(assistantId)
+      } else {
+        await vapi.start(assistantConfig)
+      }
+      return true
     } catch (err) {
       console.warn('[Vapi] Could not start session:', err?.message || err)
+      setVoiceError(err?.message || 'Could not start the voice assistant.')
       activeRef.current = false
+      return false
     }
-  }, [getVapi, attachEvents])
+  }, [getVapi, attachEvents, requestMicrophone])
 
   const stopSession = useCallback(() => {
     const vapi = vapiRef.current
@@ -155,7 +224,8 @@ Do not ask any follow-up questions yet.`
   return (
     <VapiContext.Provider value={{
       isSpeaking, isListening, isConnected, hasVapi, transcript, lastMessage,
-      startSession, stopSession, sendMessage,
+      micPermission, voiceError,
+      requestMicrophone, startSession, stopSession, sendMessage,
       introMessage: INTRO_MESSAGE,
     }}>
       {children}

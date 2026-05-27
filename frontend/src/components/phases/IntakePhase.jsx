@@ -4,7 +4,12 @@ import { useState } from 'react'
 import { useSession, PHASES } from '@/contexts/SessionContext'
 import { useVapi } from '@/contexts/VapiContext'
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8080'
+function normalizeApiBase(value) {
+  if (!value || value.startsWith('/')) return 'http://localhost:8080'
+  return value
+}
+
+const API_BASE = normalizeApiBase(process.env.NEXT_PUBLIC_API_BASE_URL)
 
 const pillBtn = (active) => ({
   padding: '7px 18px',

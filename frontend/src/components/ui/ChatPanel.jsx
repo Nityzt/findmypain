@@ -5,11 +5,25 @@ import { useVapi } from '@/contexts/VapiContext'
 import { useSession } from '@/contexts/SessionContext'
 import PainPointChip from './PainPointChip'
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8080'
+function normalizeApiBase(value) {
+  if (!value || value.startsWith('/')) return 'http://localhost:8080'
+  return value
+}
+
+const API_BASE = normalizeApiBase(process.env.NEXT_PUBLIC_API_BASE_URL)
 
 export default function ChatPanel({ onReadyForReport }) {
-  const { painPoints, removePainPoint, chatHistory, addMessage, sessionId, assessment } = useSession()
-  const { isSpeaking, isListening, isConnected, sendMessage, lastMessage } = useVapi()
+  const { intake, painPoints, removePainPoint, chatHistory, addMessage, sessionId, assessment } = useSession()
+  const {
+    isSpeaking,
+    isListening,
+    isConnected,
+    sendMessage,
+    startSession,
+    stopSession,
+    voiceError,
+    lastMessage,
+  } = useVapi()
   const [inputText, setInputText] = useState('')
   const [isTyping, setIsTyping] = useState(false)
   const messagesEndRef = useRef(null)
@@ -58,6 +72,15 @@ export default function ChatPanel({ onReadyForReport }) {
 
   const handleKeyDown = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend() }
+  }
+
+  const handleMicClick = () => {
+    if (isConnected) {
+      stopSession()
+      return
+    }
+
+    startSession({ intake, painPoints, isIntro: false })
   }
 
   return (
@@ -175,14 +198,26 @@ export default function ChatPanel({ onReadyForReport }) {
         borderTop: '1px solid rgba(0,170,255,0.08)',
         display: 'flex', gap: '8px', alignItems: 'center',
       }}>
-        {/* Mic indicator dot */}
-        <div style={{
-          width: '8px', height: '8px', borderRadius: '50%', flexShrink: 0,
-          background: isListening ? '#00d0ff' : 'rgba(0,170,255,0.2)',
-          boxShadow: isListening ? '0 0 8px #00d0ff' : 'none',
-          animation: isListening ? 'pulse 1.5s ease-in-out infinite' : 'none',
-          marginLeft: '2px',
-        }} />
+        {/* Mic status indicator */}
+        <button
+          type="button"
+          onClick={handleMicClick}
+          title={isConnected ? 'Stop voice assistant' : 'Start voice assistant'}
+          style={{
+            width: '24px', height: '24px', borderRadius: '50%', flexShrink: 0,
+            background: isListening ? 'rgba(0,208,255,0.14)' : 'rgba(0,170,255,0.06)',
+            border: `1px solid ${isListening ? '#00d0ff' : 'rgba(0,170,255,0.25)'}`,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: '12px',
+            boxShadow: isListening ? '0 0 10px rgba(0,208,255,0.45)' : 'none',
+            animation: isListening ? 'pulse 1.5s ease-in-out infinite' : 'none',
+            cursor: 'pointer',
+            padding: 0,
+            color: '#7dd4f8',
+          }}
+        >
+          {isConnected ? '■' : '●'}
+        </button>
 
         <input
           value={inputText}
@@ -217,6 +252,17 @@ export default function ChatPanel({ onReadyForReport }) {
           send
         </button>
       </div>
+
+      {voiceError && (
+        <div style={{
+          padding: '0 16px 12px',
+          color: '#ef4444',
+          fontSize: '11px',
+          fontFamily: 'monospace',
+        }}>
+          {voiceError}
+        </div>
+      )}
     </div>
   )
 }
