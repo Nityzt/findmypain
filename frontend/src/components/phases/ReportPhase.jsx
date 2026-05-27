@@ -5,7 +5,6 @@ import dynamic from 'next/dynamic'
 import { useSession, PHASES } from '@/contexts/SessionContext'
 import { useVapi } from '@/contexts/VapiContext'
 
-// PDF renderer is client-side only
 const PDFDownloadLink = dynamic(
   () => import('@react-pdf/renderer').then((m) => m.PDFDownloadLink),
   { ssr: false, loading: () => null }
@@ -16,6 +15,27 @@ const ReportDocument = dynamic(
 )
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8080'
+
+function SectionCard({ label, children }) {
+  return (
+    <div style={{
+      background: 'rgba(6,14,30,0.7)',
+      border: '1px solid rgba(0,170,255,0.1)',
+      borderRadius: '10px',
+      padding: '16px 18px',
+      marginBottom: '12px',
+    }}>
+      <p style={{
+        fontSize: '10px', color: 'rgba(0,170,255,0.45)',
+        letterSpacing: '0.15em', marginBottom: '12px', marginTop: 0,
+        fontWeight: 400,
+      }}>
+        {label}
+      </p>
+      {children}
+    </div>
+  )
+}
 
 export default function ReportPhase() {
   const { intake, painPoints, chatHistory, canvasScreenshot, assessment, setAssessment, sessionId, setPhase } = useSession()
@@ -38,7 +58,6 @@ export default function ReportPhase() {
         const data = await res.json()
         setAssessment(data.assessment)
       } else {
-        // Fallback assessment for demo
         setAssessment({
           urgency: 'moderate',
           differentials: ['Musculoskeletal strain', 'Nerve compression', 'Referred pain pattern'],
@@ -68,70 +87,73 @@ export default function ReportPhase() {
   return (
     <div style={{
       position: 'absolute', inset: 0, zIndex: 30,
-      background: '#040d1a',
+      background: '#030a16',
       overflowY: 'auto',
-      animation: 'fadeIn 0.5s ease forwards',
+      animation: 'fadeIn 0.4s ease forwards',
     }}>
-      <div style={{ maxWidth: '720px', margin: '0 auto', padding: '32px 24px 80px' }}>
+      <div style={{ maxWidth: '680px', margin: '0 auto', padding: '28px 20px 80px' }}>
 
         {/* Header */}
-        <div style={{ marginBottom: '32px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ marginBottom: '28px', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
           <div>
-            <div style={{ fontSize: '11px', color: '#00aaff', fontFamily: 'monospace', letterSpacing: '0.25em', marginBottom: '6px' }}>
-              ASSESSMENT COMPLETE
-            </div>
-            <div style={{ fontSize: '24px', color: '#e0f4ff', fontWeight: 300 }}>
+            <p style={{ fontSize: '11px', color: 'rgba(0,170,255,0.4)', letterSpacing: '0.12em', marginBottom: '5px', marginTop: 0 }}>
+              findmypain
+            </p>
+            <h1 style={{ fontSize: '22px', color: '#d4eeff', fontWeight: 300, margin: 0, letterSpacing: '-0.01em' }}>
               Pain Report
-            </div>
+            </h1>
+            <p style={{ fontSize: '12px', color: 'rgba(160,200,220,0.4)', margin: '4px 0 0', fontWeight: 300 }}>
+              {new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
+            </p>
           </div>
           <button
             onClick={() => setPhase(PHASES.CHAT)}
             style={{
-              background: 'none', border: '1px solid rgba(0,170,255,0.25)',
-              borderRadius: '8px', color: '#5a90b0', fontSize: '12px',
-              fontFamily: 'monospace', cursor: 'pointer', padding: '8px 14px',
+              background: 'none', border: '1px solid rgba(0,170,255,0.12)',
+              borderRadius: '6px', color: 'rgba(160,200,220,0.4)',
+              fontSize: '11px', letterSpacing: '0.08em',
+              cursor: 'pointer', padding: '6px 11px',
+              transition: 'all 0.2s', marginTop: '4px',
             }}
           >
-            ← BACK
+            ← back
           </button>
         </div>
 
         {loading ? (
-          <div style={{ textAlign: 'center', padding: '60px 0' }}>
+          <div style={{ textAlign: 'center', padding: '70px 0' }}>
             <div style={{
-              width: '40px', height: '40px', border: '2px solid rgba(0,208,255,0.2)',
-              borderTop: '2px solid #00d0ff', borderRadius: '50%',
+              width: '32px', height: '32px',
+              border: '1px solid rgba(0,208,255,0.15)',
+              borderTop: '1px solid #00d0ff', borderRadius: '50%',
               animation: 'spin 1s linear infinite',
-              margin: '0 auto 16px',
+              margin: '0 auto 14px',
             }} />
-            <div style={{ color: '#5a90b0', fontSize: '13px', fontFamily: 'monospace' }}>
-              GENERATING ASSESSMENT...
-            </div>
+            <p style={{ color: 'rgba(90,144,176,0.5)', fontSize: '13px', fontWeight: 300 }}>
+              generating assessment...
+            </p>
           </div>
         ) : (
           <>
-            {/* Urgency badge */}
+            {/* Urgency */}
             <div style={{
-              padding: '16px 20px', borderRadius: '10px',
-              border: `1px solid ${urgencyColor}`,
-              background: `${urgencyColor}15`,
-              marginBottom: '24px',
-              display: 'flex', alignItems: 'center', gap: '12px',
+              padding: '12px 16px', borderRadius: '10px',
+              border: `1px solid ${urgencyColor}40`,
+              background: `${urgencyColor}0d`,
+              marginBottom: '20px',
+              display: 'flex', alignItems: 'center', gap: '10px',
             }}>
-              <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: urgencyColor, flexShrink: 0 }} />
+              <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: urgencyColor, flexShrink: 0, boxShadow: `0 0 8px ${urgencyColor}` }} />
               <div>
-                <div style={{ fontSize: '10px', color: '#5a90b0', fontFamily: 'monospace', marginBottom: '2px' }}>URGENCY LEVEL</div>
-                <div style={{ fontSize: '15px', color: urgencyColor, fontFamily: 'monospace', letterSpacing: '0.08em' }}>
-                  {assessment?.urgency?.toUpperCase() || 'UNKNOWN'}
-                </div>
+                <p style={{ fontSize: '10px', color: 'rgba(160,200,220,0.4)', marginBottom: '1px', marginTop: 0, letterSpacing: '0.1em' }}>urgency</p>
+                <p style={{ fontSize: '14px', color: urgencyColor, margin: 0, fontWeight: 400, letterSpacing: '0.06em' }}>
+                  {assessment?.urgency || 'unknown'}
+                </p>
               </div>
             </div>
 
             {/* Patient summary */}
-            <div style={{ background: '#060e1e', border: '1px solid rgba(0,170,255,0.15)', borderRadius: '10px', padding: '16px 20px', marginBottom: '16px' }}>
-              <div style={{ fontSize: '11px', color: '#00aaff', fontFamily: 'monospace', letterSpacing: '0.15em', marginBottom: '12px' }}>
-                PATIENT
-              </div>
+            <SectionCard label="patient">
               {[
                 ['Age', intake?.age],
                 ['Sex', intake?.biologicalSex],
@@ -139,77 +161,69 @@ export default function ReportPhase() {
                 ['Conditions', intake?.chronicConditions],
                 ['Medications', intake?.medications],
               ].filter(([, v]) => v).map(([label, value]) => (
-                <div key={label} style={{ display: 'flex', gap: '12px', marginBottom: '6px' }}>
-                  <span style={{ width: '100px', fontSize: '12px', color: '#5a90b0', flexShrink: 0 }}>{label}</span>
-                  <span style={{ fontSize: '12px', color: '#a0cce0' }}>{value}</span>
+                <div key={label} style={{ display: 'flex', gap: '12px', marginBottom: '5px' }}>
+                  <span style={{ width: '90px', fontSize: '12px', color: 'rgba(160,200,220,0.4)', flexShrink: 0, fontWeight: 300 }}>{label}</span>
+                  <span style={{ fontSize: '12px', color: '#9dc8e4', fontWeight: 300 }}>{value}</span>
                 </div>
               ))}
-            </div>
+            </SectionCard>
 
             {/* Pain regions */}
-            <div style={{ background: '#060e1e', border: '1px solid rgba(0,170,255,0.15)', borderRadius: '10px', padding: '16px 20px', marginBottom: '16px' }}>
-              <div style={{ fontSize: '11px', color: '#00aaff', fontFamily: 'monospace', letterSpacing: '0.15em', marginBottom: '12px' }}>
-                PAIN REGIONS ({painPoints.length})
-              </div>
+            <SectionCard label={`pain regions · ${painPoints.length}`}>
               {painPoints.map((p) => (
                 <div key={p.region} style={{
                   display: 'flex', alignItems: 'center', gap: '10px',
-                  padding: '6px 0', borderBottom: '1px solid rgba(0,170,255,0.08)',
+                  padding: '5px 0',
+                  borderBottom: '1px solid rgba(0,170,255,0.06)',
                 }}>
-                  <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#ef4444', flexShrink: 0, boxShadow: '0 0 6px #ef4444' }} />
-                  <span style={{ fontSize: '13px', color: '#c8e8ff', flex: 1 }}>{p.region}</span>
-                  <span style={{ fontSize: '11px', color: '#5a90b0', fontFamily: 'monospace' }}>{p.severity}</span>
+                  <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#ef4444', flexShrink: 0, boxShadow: '0 0 5px rgba(239,68,68,0.7)' }} />
+                  <span style={{ fontSize: '13px', color: '#bde0fa', flex: 1, fontWeight: 300 }}>{p.region}</span>
+                  <span style={{ fontSize: '11px', color: 'rgba(160,200,220,0.35)', fontWeight: 300 }}>{p.severity}</span>
                 </div>
               ))}
-            </div>
+            </SectionCard>
 
             {/* Differentials */}
             {assessment?.differentials?.length > 0 && (
-              <div style={{ background: '#060e1e', border: '1px solid rgba(0,170,255,0.15)', borderRadius: '10px', padding: '16px 20px', marginBottom: '16px' }}>
-                <div style={{ fontSize: '11px', color: '#00aaff', fontFamily: 'monospace', letterSpacing: '0.15em', marginBottom: '12px' }}>
-                  POSSIBLE CONSIDERATIONS
-                </div>
+              <SectionCard label="possible considerations">
                 {assessment.differentials.map((d, i) => (
                   <div key={i} style={{ display: 'flex', gap: '8px', marginBottom: '6px' }}>
-                    <span style={{ color: '#00aaff', fontSize: '12px' }}>•</span>
-                    <span style={{ fontSize: '13px', color: '#a0cce0' }}>{d}</span>
+                    <span style={{ color: 'rgba(0,170,255,0.4)', fontSize: '12px', marginTop: '1px' }}>·</span>
+                    <span style={{ fontSize: '13px', color: '#9dc8e4', fontWeight: 300, lineHeight: '1.5' }}>{d}</span>
                   </div>
                 ))}
-              </div>
+              </SectionCard>
             )}
 
             {/* Next steps */}
             {assessment?.nextSteps?.length > 0 && (
-              <div style={{ background: '#060e1e', border: '1px solid rgba(0,170,255,0.15)', borderRadius: '10px', padding: '16px 20px', marginBottom: '24px' }}>
-                <div style={{ fontSize: '11px', color: '#00aaff', fontFamily: 'monospace', letterSpacing: '0.15em', marginBottom: '12px' }}>
-                  RECOMMENDED NEXT STEPS
-                </div>
+              <SectionCard label="recommended next steps">
                 {assessment.nextSteps.map((s, i) => (
                   <div key={i} style={{ display: 'flex', gap: '10px', marginBottom: '8px', alignItems: 'flex-start' }}>
                     <span style={{
-                      width: '20px', height: '20px', borderRadius: '50%',
-                      background: 'rgba(0,170,255,0.15)', border: '1px solid rgba(0,170,255,0.3)',
+                      width: '18px', height: '18px', borderRadius: '50%',
+                      background: 'rgba(0,170,255,0.08)',
+                      border: '1px solid rgba(0,170,255,0.2)',
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      fontSize: '10px', color: '#00aaff', flexShrink: 0,
-                      fontFamily: 'monospace',
+                      fontSize: '10px', color: 'rgba(0,170,255,0.6)', flexShrink: 0,
                     }}>
-                      {i+1}
+                      {i + 1}
                     </span>
-                    <span style={{ fontSize: '13px', color: '#a0cce0', lineHeight: '1.5', paddingTop: '2px' }}>{s}</span>
+                    <span style={{ fontSize: '13px', color: '#9dc8e4', lineHeight: '1.55', paddingTop: '1px', fontWeight: 300 }}>{s}</span>
                   </div>
                 ))}
-              </div>
+              </SectionCard>
             )}
 
             {/* Disclaimer */}
             <div style={{
-              padding: '12px 16px', borderRadius: '8px',
-              background: 'rgba(245,158,11,0.08)',
-              border: '1px solid rgba(245,158,11,0.25)',
-              fontSize: '12px', color: '#a08040', lineHeight: '1.6',
-              marginBottom: '24px',
+              padding: '12px 14px', borderRadius: '8px',
+              background: 'rgba(245,158,11,0.05)',
+              border: '1px solid rgba(245,158,11,0.15)',
+              fontSize: '12px', color: 'rgba(180,140,60,0.7)', lineHeight: '1.65',
+              marginBottom: '20px', fontWeight: 300,
             }}>
-              ⚠️ This report is AI-generated and for informational purposes only. It is not medical advice, diagnosis, or treatment. Please consult a qualified healthcare professional for any health concerns.
+              ⚠ This report is AI-generated and for informational purposes only. It is not medical advice, diagnosis, or treatment. Please consult a qualified healthcare professional.
             </div>
 
             {/* PDF download */}
@@ -224,19 +238,20 @@ export default function ReportPhase() {
                     canvasScreenshot={canvasScreenshot}
                   />
                 }
-                fileName={`findmypain-report-${new Date().toISOString().slice(0,10)}.pdf`}
+                fileName={`findmypain-${new Date().toISOString().slice(0,10)}.pdf`}
               >
                 {({ loading: pdfLoading }) => (
                   <button style={{
-                    width: '100%', padding: '16px',
-                    background: 'linear-gradient(135deg, #0055cc, #0033aa)',
-                    border: '1px solid #00aaff', borderRadius: '10px',
-                    color: '#e0f4ff', fontSize: '14px',
-                    fontFamily: 'monospace', letterSpacing: '0.1em',
+                    width: '100%', padding: '14px',
+                    background: 'rgba(0,80,200,0.15)',
+                    border: '1px solid rgba(0,170,255,0.4)',
+                    borderRadius: '10px',
+                    color: '#7dd4f8', fontSize: '13px',
+                    letterSpacing: '0.08em',
                     cursor: 'pointer',
-                    boxShadow: '0 0 24px rgba(0,85,204,0.4)',
+                    transition: 'all 0.2s',
                   }}>
-                    {pdfLoading ? '⏳ PREPARING PDF...' : '⬇ DOWNLOAD PDF REPORT'}
+                    {pdfLoading ? 'preparing pdf...' : '↓ download pdf report'}
                   </button>
                 )}
               </PDFDownloadLink>
@@ -246,13 +261,16 @@ export default function ReportPhase() {
             <button
               onClick={() => window.location.reload()}
               style={{
-                width: '100%', padding: '12px', marginTop: '12px',
-                background: 'none', border: '1px solid rgba(0,170,255,0.2)',
-                borderRadius: '10px', color: '#5a90b0', fontSize: '13px',
-                fontFamily: 'monospace', cursor: 'pointer',
+                width: '100%', padding: '11px', marginTop: '10px',
+                background: 'none',
+                border: '1px solid rgba(0,170,255,0.1)',
+                borderRadius: '10px',
+                color: 'rgba(160,200,220,0.35)',
+                fontSize: '12px', letterSpacing: '0.06em',
+                cursor: 'pointer', fontWeight: 300,
               }}
             >
-              START NEW SESSION
+              start new session
             </button>
           </>
         )}

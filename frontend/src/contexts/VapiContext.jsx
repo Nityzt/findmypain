@@ -36,11 +36,13 @@ export function VapiProvider({ children }) {
   const vapiRef   = useRef(null)
   const activeRef = useRef(false) // prevent duplicate sessions
 
-  const [isSpeaking,  setIsSpeaking]  = useState(false)
-  const [isListening, setIsListening] = useState(false)
-  const [isConnected, setIsConnected] = useState(false)
-  const [hasVapi,     setHasVapi]     = useState(false)
-  const [transcript,  setTranscript]  = useState('')
+  const [isSpeaking,   setIsSpeaking]   = useState(false)
+  const [isListening,  setIsListening]  = useState(false)
+  const [isConnected,  setIsConnected]  = useState(false)
+  const [hasVapi,      setHasVapi]      = useState(false)
+  const [transcript,   setTranscript]   = useState('')
+  // Last completed utterance from either side — ChatPanel subscribes to sync chat history
+  const [lastMessage,  setLastMessage]  = useState(null) // { role: 'user'|'assistant', content }
 
   // Lazily load the Vapi SDK — returns null if no API key configured
   const getVapi = useCallback(async () => {
@@ -71,6 +73,10 @@ export function VapiProvider({ children }) {
     vapi.on('message', (msg) => {
       if (msg.type === 'transcript' && msg.transcriptType === 'final') {
         setTranscript(msg.transcript)
+        // Broadcast completed utterances so ChatPanel can add them to history
+        if (msg.role === 'user' || msg.role === 'assistant') {
+          setLastMessage({ role: msg.role, content: msg.transcript })
+        }
       }
     })
   }, [])
@@ -83,25 +89,32 @@ export function VapiProvider({ children }) {
       return
     }
 
+    // Fully stop any prior call and wait a tick so call-end events settle
     try { vapi.stop() } catch (_) {}
+    await new Promise(r => setTimeout(r, 300))
+
     activeRef.current = true
     attachEvents(vapi)
 
     const systemPrompt = isIntro
-      ? `You are a friendly medical intake assistant for FindMyPain.
-         Say exactly this one sentence and nothing else: "${INTRO_MESSAGE}"`
+      ? `You are a warm medical intake assistant for FindMyPain.
+Say exactly this opening and nothing else: "${INTRO_MESSAGE}"
+Do not ask any follow-up questions yet.`
       : buildSystemPrompt(intake, painPoints)
 
     try {
       await vapi.start({
         name: 'FindMyPain AI',
+        // firstMessage tells Vapi to speak this immediately without waiting for user input
         firstMessage: isIntro ? INTRO_MESSAGE : undefined,
         transcriber: { provider: 'deepgram', model: 'nova-2', language: 'en-US' },
         model: {
           provider: 'anthropic',
-          model: 'claude-haiku-4-5-20251001',
+          // Valid Vapi model IDs for Anthropic — haiku-4-5 is not recognized by Vapi
+          model: 'claude-3-5-haiku-20241022',
           messages: [{ role: 'system', content: systemPrompt }],
-          maxTokens: 150,
+          maxTokens: isIntro ? 60 : 200,
+          temperature: 0.4,
         },
         voice: {
           provider: '11labs',
@@ -141,7 +154,7 @@ export function VapiProvider({ children }) {
 
   return (
     <VapiContext.Provider value={{
-      isSpeaking, isListening, isConnected, hasVapi, transcript,
+      isSpeaking, isListening, isConnected, hasVapi, transcript, lastMessage,
       startSession, stopSession, sendMessage,
       introMessage: INTRO_MESSAGE,
     }}>

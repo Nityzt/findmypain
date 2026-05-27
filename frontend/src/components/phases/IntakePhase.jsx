@@ -7,21 +7,21 @@ import { useVapi } from '@/contexts/VapiContext'
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8080'
 
 const pillBtn = (active) => ({
-  padding: '8px 16px',
-  border: `1px solid ${active ? '#00aaff' : 'rgba(0,170,255,0.3)'}`,
+  padding: '7px 18px',
+  border: `1px solid ${active ? 'rgba(0,170,255,0.6)' : 'rgba(0,170,255,0.15)'}`,
   borderRadius: '20px',
-  background: active ? 'rgba(0,170,255,0.15)' : 'transparent',
-  color: active ? '#00d0ff' : '#5a90b0',
+  background: active ? 'rgba(0,170,255,0.1)' : 'transparent',
+  color: active ? '#7dd4f8' : 'rgba(160,200,220,0.45)',
   fontSize: '13px', cursor: 'pointer',
   transition: 'all 0.2s',
-  fontFamily: 'monospace',
 })
 
 const inputStyle = {
-  width: '100%', padding: '10px 14px', boxSizing: 'border-box',
-  background: 'rgba(0,20,40,0.8)',
-  border: '1px solid rgba(0,170,255,0.2)', borderRadius: '8px',
-  color: '#e0f4ff', fontSize: '14px', outline: 'none',
+  width: '100%', padding: '9px 14px', boxSizing: 'border-box',
+  background: 'rgba(0,12,28,0.5)',
+  border: '1px solid rgba(0,170,255,0.12)', borderRadius: '8px',
+  color: '#c8e8ff', fontSize: '14px', outline: 'none',
+  fontWeight: 300,
 }
 
 export default function IntakePhase() {
@@ -38,14 +38,13 @@ export default function IntakePhase() {
   const [showOptional, setShowOptional] = useState(false)
 
   const isValid = form.age && form.biologicalSex
-
   const update = (key, val) => setForm((p) => ({ ...p, [key]: val }))
 
   const handleSubmit = async () => {
     if (!isValid || submitting) return
     setSubmitting(true)
     setIntake(form)
-    stopSession() // stop the intro session
+    stopSession()
 
     try {
       const res = await fetch(`${API_BASE}/api/session/start`, {
@@ -57,8 +56,7 @@ export default function IntakePhase() {
         const data = await res.json()
         setSessionId(data.sessionId)
       }
-    } catch (err) {
-      // Proceed even if backend is unavailable (demo mode)
+    } catch {
       console.warn('[Intake] Backend unavailable, continuing offline')
     }
 
@@ -70,46 +68,48 @@ export default function IntakePhase() {
     <div style={{
       position: 'absolute', inset: 0, zIndex: 20,
       display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
-      background: 'linear-gradient(to top, rgba(4,13,26,0.97) 60%, transparent)',
-      animation: 'slideUp 0.5s cubic-bezier(0.4,0,0.2,1) forwards',
+      background: 'linear-gradient(to top, rgba(3,10,22,0.98) 55%, transparent)',
+      animation: 'slideUp 0.45s cubic-bezier(0.4,0,0.2,1) forwards',
     }}>
       <div style={{
-        width: '100%', maxWidth: '480px',
-        padding: '32px 28px',
-        marginBottom: '5vh',
-        background: 'rgba(6,14,30,0.96)',
-        border: '1px solid rgba(0,170,255,0.2)',
-        borderRadius: '16px 16px 0 0',
-        backdropFilter: 'blur(12px)',
-        boxShadow: '0 -20px 60px rgba(0,0,0,0.5)',
+        width: '100%', maxWidth: '420px',
+        padding: '28px 24px 32px',
+        marginBottom: '4vh',
       }}>
-        <div style={{ marginBottom: '24px' }}>
-          <div style={{ fontSize: '11px', color: '#00aaff', fontFamily: 'monospace', letterSpacing: '0.2em', marginBottom: '6px' }}>
-            PATIENT INTAKE
-          </div>
-          <div style={{ fontSize: '20px', color: '#e0f4ff', fontWeight: 300 }}>
+        {/* Heading */}
+        <div style={{ marginBottom: '22px' }}>
+          <p style={{
+            fontSize: '13px', color: 'rgba(0,170,255,0.4)',
+            letterSpacing: '0.12em', marginBottom: '6px', fontWeight: 400,
+          }}>
+            before we begin
+          </p>
+          <h2 style={{
+            fontSize: '22px', color: '#d4eeff', fontWeight: 300,
+            letterSpacing: '-0.01em', margin: 0,
+          }}>
             Tell us about yourself
-          </div>
+          </h2>
         </div>
 
         {/* Age */}
-        <div style={{ marginBottom: '18px' }}>
-          <label style={{ fontSize: '12px', color: '#5a90b0', fontFamily: 'monospace', display: 'block', marginBottom: '6px' }}>
-            AGE *
+        <div style={{ marginBottom: '16px' }}>
+          <label style={{ fontSize: '11px', color: 'rgba(160,200,220,0.5)', display: 'block', marginBottom: '6px', letterSpacing: '0.08em' }}>
+            age
           </label>
           <input
             type="number" min="1" max="120"
             value={form.age}
             onChange={(e) => update('age', e.target.value)}
-            placeholder="Enter your age"
+            placeholder="Your age"
             style={inputStyle}
           />
         </div>
 
         {/* Biological Sex */}
-        <div style={{ marginBottom: '18px' }}>
-          <label style={{ fontSize: '12px', color: '#5a90b0', fontFamily: 'monospace', display: 'block', marginBottom: '8px' }}>
-            BIOLOGICAL SEX *
+        <div style={{ marginBottom: '20px' }}>
+          <label style={{ fontSize: '11px', color: 'rgba(160,200,220,0.5)', display: 'block', marginBottom: '8px', letterSpacing: '0.08em' }}>
+            biological sex
           </label>
           <div style={{ display: 'flex', gap: '8px' }}>
             {['Male', 'Female', 'Other'].map((opt) => (
@@ -120,27 +120,28 @@ export default function IntakePhase() {
           </div>
         </div>
 
-        {/* Optional section toggle */}
+        {/* Optional toggle */}
         <button
           onClick={() => setShowOptional(!showOptional)}
           style={{
             background: 'none', border: 'none', cursor: 'pointer',
-            color: '#00aaff', fontSize: '12px', fontFamily: 'monospace',
-            letterSpacing: '0.1em', marginBottom: '16px', padding: '0',
+            color: 'rgba(0,170,255,0.4)', fontSize: '12px',
+            letterSpacing: '0.08em', marginBottom: '16px', padding: '0',
+            display: 'flex', alignItems: 'center', gap: '5px',
           }}
         >
-          {showOptional ? '▾' : '▸'} HELP US HELP YOU (optional)
+          <span style={{ fontSize: '9px', transition: 'transform 0.2s', display: 'inline-block', transform: showOptional ? 'rotate(90deg)' : 'rotate(0deg)' }}>▶</span>
+          add more context
         </button>
 
         {showOptional && (
           <div style={{ marginBottom: '18px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
-            {/* Pain Onset */}
             <div>
-              <label style={{ fontSize: '12px', color: '#5a90b0', fontFamily: 'monospace', display: 'block', marginBottom: '8px' }}>
-                HOW DID THE PAIN START?
+              <label style={{ fontSize: '11px', color: 'rgba(160,200,220,0.5)', display: 'block', marginBottom: '8px', letterSpacing: '0.08em' }}>
+                how did the pain start?
               </label>
               <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                {['Sudden', 'Gradual', 'Came & went'].map((opt) => (
+                {['Sudden', 'Gradual', 'On and off'].map((opt) => (
                   <button key={opt} onClick={() => update('painOnset', opt)} style={pillBtn(form.painOnset === opt)}>
                     {opt}
                   </button>
@@ -148,10 +149,9 @@ export default function IntakePhase() {
               </div>
             </div>
 
-            {/* Chronic conditions */}
             <div>
-              <label style={{ fontSize: '12px', color: '#5a90b0', fontFamily: 'monospace', display: 'block', marginBottom: '6px' }}>
-                CHRONIC CONDITIONS
+              <label style={{ fontSize: '11px', color: 'rgba(160,200,220,0.5)', display: 'block', marginBottom: '6px', letterSpacing: '0.08em' }}>
+                chronic conditions
               </label>
               <input
                 value={form.chronicConditions}
@@ -161,10 +161,9 @@ export default function IntakePhase() {
               />
             </div>
 
-            {/* Medications */}
             <div>
-              <label style={{ fontSize: '12px', color: '#5a90b0', fontFamily: 'monospace', display: 'block', marginBottom: '6px' }}>
-                CURRENT MEDICATIONS
+              <label style={{ fontSize: '11px', color: 'rgba(160,200,220,0.5)', display: 'block', marginBottom: '6px', letterSpacing: '0.08em' }}>
+                current medications
               </label>
               <input
                 value={form.medications}
@@ -176,21 +175,23 @@ export default function IntakePhase() {
           </div>
         )}
 
+        {/* Submit */}
         <button
           onClick={handleSubmit}
           disabled={!isValid || submitting}
           style={{
-            width: '100%', padding: '14px',
-            background: isValid ? 'linear-gradient(135deg, #0055cc, #0033aa)' : '#0a1a2e',
-            border: `1px solid ${isValid ? '#00aaff' : 'rgba(0,170,255,0.2)'}`,
-            borderRadius: '10px', color: isValid ? '#e0f4ff' : '#3a6080',
-            fontSize: '14px', fontFamily: 'monospace', letterSpacing: '0.1em',
+            width: '100%', padding: '13px',
+            background: isValid ? 'rgba(0,100,220,0.18)' : 'transparent',
+            border: `1px solid ${isValid ? 'rgba(0,170,255,0.5)' : 'rgba(0,170,255,0.1)'}`,
+            borderRadius: '10px',
+            color: isValid ? '#7dd4f8' : 'rgba(160,200,220,0.25)',
+            fontSize: '13px', letterSpacing: '0.08em',
             cursor: isValid ? 'pointer' : 'default',
-            boxShadow: isValid ? '0 0 20px rgba(0,85,204,0.3)' : 'none',
-            transition: 'all 0.3s',
+            transition: 'all 0.25s',
+            backdropFilter: 'blur(8px)',
           }}
         >
-          {submitting ? 'INITIALIZING...' : 'SELECT PAIN POINTS →'}
+          {submitting ? 'starting...' : 'mark your pain points →'}
         </button>
       </div>
     </div>

@@ -85,6 +85,8 @@ function AppLayout() {
             width: '58%',
             overflow: 'hidden',
             position: 'relative',
+            display: 'flex',
+            flexDirection: 'column',
           }}
         >
           <ChatPhase />

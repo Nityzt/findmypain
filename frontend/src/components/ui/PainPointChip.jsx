@@ -5,22 +5,23 @@ export default function PainPointChip({ region, onRemove }) {
     <span style={{
       display: 'inline-flex',
       alignItems: 'center',
-      gap: '6px',
-      padding: '4px 12px',
-      background: '#0b2040',
-      border: '1px solid #00aaff',
+      gap: '5px',
+      padding: '3px 10px',
+      background: 'rgba(0,40,90,0.4)',
+      border: '1px solid rgba(0,170,255,0.2)',
       borderRadius: '20px',
       fontSize: '12px',
-      color: '#00d0ff',
-      fontFamily: 'monospace',
-      letterSpacing: '0.03em',
+      color: 'rgba(125,212,248,0.85)',
       whiteSpace: 'nowrap',
+      fontWeight: 300,
+      backdropFilter: 'blur(4px)',
     }}>
       <span style={{
-        width: '6px', height: '6px', borderRadius: '50%',
+        width: '5px', height: '5px', borderRadius: '50%',
         background: '#ef4444', display: 'inline-block',
-        boxShadow: '0 0 6px #ef4444',
-        animation: 'pulse 1.5s ease-in-out infinite',
+        boxShadow: '0 0 5px rgba(239,68,68,0.7)',
+        animation: 'pulse 2s ease-in-out infinite',
+        flexShrink: 0,
       }} />
       {region}
       {onRemove && (
@@ -28,8 +29,9 @@ export default function PainPointChip({ region, onRemove }) {
           onClick={() => onRemove(region)}
           style={{
             background: 'none', border: 'none', cursor: 'pointer',
-            color: '#5a90b0', fontSize: '14px', lineHeight: 1,
-            padding: '0 2px', marginLeft: '2px',
+            color: 'rgba(160,200,220,0.4)', fontSize: '13px', lineHeight: 1,
+            padding: '0 1px', marginLeft: '1px',
+            transition: 'color 0.2s',
           }}
         >×</button>
       )}

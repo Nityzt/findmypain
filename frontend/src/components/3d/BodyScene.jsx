@@ -47,14 +47,16 @@ function SmartOrbitControls({ phase }) {
     <OrbitControls
       ref={controlsRef}
       enablePan={false}
-      minDistance={3}
-      maxDistance={9}
+      minDistance={5}
+      maxDistance={18}
       minPolarAngle={Math.PI / 6}
       maxPolarAngle={Math.PI * 5 / 6}
       autoRotate={isLanding}
       autoRotateSpeed={0.65}
       enableDamping
-      dampingFactor={0.04}
+      dampingFactor={0.06}
+      enableZoom
+      zoomSpeed={1.2}
       enableRotate={phase !== PHASES.REPORT}
     />
   )
@@ -68,7 +70,7 @@ export default function BodyScene({ phase, painPoints = [], onRegionClick, onCre
 
   return (
     <Canvas
-      camera={{ position: [0, 0, 5.5], fov: 50 }}
+      camera={{ position: [0, 0, 9], fov: 42 }}
       style={{ background: 'transparent' }}
       gl={{ powerPreference: 'high-performance', antialias: true, alpha: true }}
       shadows
