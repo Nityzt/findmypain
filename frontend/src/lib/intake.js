@@ -79,7 +79,7 @@ const RED_FLAGS = [
 
 const NEGATION = /\b(no|not|without|never|denies|don't|dont|do not|haven't|havent|isn't|any)\b(?:(?!\bbut\b)[^.!?,;]){0,25}$/
 
-// Keyword scan used only when Claude is unavailable. Skips mentions that are
+// Keyword scan used only when the LLM is unavailable. Skips mentions that are
 // negated just before the keyword ("no numbness", "I don't have chest pain").
 export function findRedFlags(history) {
   const text = history.filter((m) => m.role === 'user').map((m) => m.content.toLowerCase()).join(' \n ')

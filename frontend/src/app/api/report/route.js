@@ -1,6 +1,5 @@
-import Anthropic from '@anthropic-ai/sdk'
 import { z } from 'zod'
-import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod'
+import { generateStructured, hasGemini } from '@/lib/gemini'
 import {
   describePatient, describeRegions, sanitizeHistory, sanitizeIntake,
   sanitizePainPoints, findRedFlags,
@@ -84,7 +83,7 @@ export async function POST(request) {
   const painPoints = sanitizePainPoints(body.painPoints)
   const history = sanitizeHistory(body.history)
 
-  if (!process.env.ANTHROPIC_API_KEY || history.length === 0) {
+  if (!hasGemini() || history.length === 0) {
     return Response.json({ report: fallbackReport(intake, painPoints, history), source: 'fallback' })
   }
 
@@ -93,27 +92,22 @@ export async function POST(request) {
     .join('\n')
 
   try {
-    const client = new Anthropic()
-    const response = await client.messages.parse({
-      model: 'claude-opus-5-5',
-      max_tokens: 8000,
-      output_config: { effort: 'medium', format: zodOutputFormat(ReportSchema) },
+    const report = await generateStructured({
       system: SYSTEM,
+      schema: ReportSchema,
+      maxOutputTokens: 4096,
+      temperature: 0.2,
       messages: [{
         role: 'user',
         content: `<intake>\n${describePatient(intake)}\n</intake>\n\n<marked_regions>\n${describeRegions(painPoints)}\n</marked_regions>\n\n<transcript>\n${transcript}\n</transcript>`,
       }],
     })
-    if (response.stop_reason === 'refusal' || !response.parsed_output) {
+    if (!report) {
       return Response.json({ report: fallbackReport(intake, painPoints, history), source: 'fallback' })
     }
-    return Response.json({ report: response.parsed_output, source: 'claude' })
+    return Response.json({ report, source: 'gemini' })
   } catch (error) {
-    if (error instanceof Anthropic.APIError) {
-      console.error('[api/report] Claude API error', error.status, error.message)
-    } else {
-      console.error('[api/report] unexpected error', error)
-    }
+    console.error('[api/report] Gemini error', error?.status ?? '', error?.message ?? error)
     return Response.json({ report: fallbackReport(intake, painPoints, history), source: 'fallback' })
   }
 }

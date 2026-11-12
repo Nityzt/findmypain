@@ -1,6 +1,5 @@
-import Anthropic from '@anthropic-ai/sdk'
 import { z } from 'zod'
-import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod'
+import { generateStructured, hasGemini } from '@/lib/gemini'
 import {
   interviewerPrompt, sanitizeHistory, sanitizeIntake, sanitizePainPoints,
   describeRegions, findRedFlags, REPORT_READY_PHRASE,
@@ -52,11 +51,11 @@ export async function POST(request) {
   const painPoints = sanitizePainPoints(body.painPoints)
   const history = sanitizeHistory(body.history)
 
-  if (!process.env.ANTHROPIC_API_KEY) {
+  if (!hasGemini()) {
     return Response.json({ ...scriptedReply(history, painPoints), source: 'scripted' })
   }
 
-  // The Messages API needs a user turn first; the opening question has none yet.
+  // The model needs a user turn first; the opening question has none yet.
   const messages = [
     { role: 'user', content: '[The patient has opened the chat. Greet them briefly and ask your first question.]' },
     ...history,
@@ -67,24 +66,18 @@ export async function POST(request) {
   }
 
   try {
-    const client = new Anthropic()
-    const response = await client.messages.parse({
-      model: 'claude-opus-5-5',
-      max_tokens: 2000,
-      output_config: { effort: 'low', format: zodOutputFormat(ReplySchema) },
+    const result = await generateStructured({
       system: interviewerPrompt(intake, painPoints),
       messages,
+      schema: ReplySchema,
+      maxOutputTokens: 1024,
     })
-    if (response.stop_reason === 'refusal' || !response.parsed_output) {
+    if (!result?.reply) {
       return Response.json({ ...scriptedReply(history, painPoints), source: 'scripted' })
     }
-    return Response.json({ ...response.parsed_output, source: 'claude' })
+    return Response.json({ ...result, source: 'gemini' })
   } catch (error) {
-    if (error instanceof Anthropic.APIError) {
-      console.error('[api/chat] Claude API error', error.status, error.message)
-    } else {
-      console.error('[api/chat] unexpected error', error)
-    }
+    console.error('[api/chat] Gemini error', error?.status ?? '', error?.message ?? error)
     return Response.json({ ...scriptedReply(history, painPoints), source: 'scripted' })
   }
 }
