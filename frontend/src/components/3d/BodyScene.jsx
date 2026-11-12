@@ -1,24 +1,32 @@
 'use client'
 
-import { Canvas } from '@react-three/fiber'
+import { Canvas, useThree } from '@react-three/fiber'
 import { OrbitControls, Environment } from '@react-three/drei'
 import { Suspense, useRef, useEffect } from 'react'
-import * as THREE from 'three'
 import HumanBodyModel from './HumanBodyModel'
 import { PHASES } from '@/contexts/SessionContext'
 import { useVapi } from '@/contexts/VapiContext'
 
-function SmartOrbitControls({ phase }) {
-  const controlsRef = useRef()
-  const timerRef    = useRef(null)
-  const isLanding   = phase === PHASES.LANDING
+const FRONT_CAMERA = [0, 0, 9]
+
+function SmartOrbitControls({ phase, controlsRef }) {
+  const timerRef  = useRef(null)
+  const isLanding = phase === PHASES.LANDING
+  const camera    = useThree((s) => s.camera)
 
   useEffect(() => {
     const controls = controlsRef.current
     if (!controls) return
 
-    // Disable auto-rotate immediately when leaving landing
     controls.autoRotate = isLanding
+
+    // Auto-rotate leaves the body at an arbitrary angle. Face the patient
+    // front-on once they start marking pain, so left/right reads naturally.
+    if (phase === PHASES.PAIN_SELECT) {
+      camera.position.set(...FRONT_CAMERA)
+      controls.target.set(0, 0, 0)
+      controls.update()
+    }
 
     if (!isLanding) return
 
@@ -29,8 +37,7 @@ function SmartOrbitControls({ phase }) {
     const onEnd = () => {
       if (timerRef.current) clearTimeout(timerRef.current)
       timerRef.current = setTimeout(() => {
-        if (controlsRef.current && phase === PHASES.LANDING)
-          controlsRef.current.autoRotate = true
+        if (controlsRef.current) controlsRef.current.autoRotate = true
       }, 2200)
     }
 
@@ -41,7 +48,7 @@ function SmartOrbitControls({ phase }) {
       controls.removeEventListener('start', onStart)
       controls.removeEventListener('end',   onEnd)
     }
-  }, [phase, isLanding])
+  }, [phase, isLanding, camera, controlsRef])
 
   return (
     <OrbitControls
@@ -62,21 +69,56 @@ function SmartOrbitControls({ phase }) {
   )
 }
 
-export default function BodyScene({ phase, painPoints = [], onRegionClick, onCreated }) {
+// Registers a capture() function that renders one front-on frame and returns
+// a cropped PNG data URL for the PDF report.
+function CaptureBridge({ captureRef, controlsRef }) {
+  const { gl, scene, camera } = useThree()
+
+  useEffect(() => {
+    captureRef.current = () => {
+      const saved = camera.position.clone()
+      camera.position.set(...FRONT_CAMERA)
+      camera.lookAt(0, 0, 0)
+      gl.render(scene, camera)
+
+      const src = gl.domElement
+      const h = src.height
+      const w = Math.min(src.width, Math.round(h * 0.9))
+      const out = document.createElement('canvas')
+      out.width = w
+      out.height = h
+      const ctx = out.getContext('2d')
+      ctx.fillStyle = '#061426'
+      ctx.fillRect(0, 0, w, h)
+      ctx.drawImage(src, (src.width - w) / 2, 0, w, h, 0, 0, w, h)
+      const url = out.toDataURL('image/png')
+
+      camera.position.copy(saved)
+      controlsRef.current?.update()
+      gl.render(scene, camera)
+      return url
+    }
+    return () => { captureRef.current = null }
+  }, [gl, scene, camera, captureRef, controlsRef])
+
+  return null
+}
+
+export default function BodyScene({ phase, painPoints = [], onRegionClick, captureRef }) {
   const clickable = phase === PHASES.PAIN_SELECT
   // Read isSpeaking here (DOM tree) and pass it as a prop into Canvas
   // — context cannot cross the R3F renderer boundary
   const { isSpeaking } = useVapi()
+  const controlsRef = useRef()
 
   return (
     <Canvas
-      camera={{ position: [0, 0, 9], fov: 42 }}
+      camera={{ position: FRONT_CAMERA, fov: 42 }}
       style={{ background: 'transparent' }}
-      gl={{ powerPreference: 'high-performance', antialias: true, alpha: true }}
+      gl={{ powerPreference: 'high-performance', antialias: true, alpha: true, preserveDrawingBuffer: true }}
       shadows
-      onCreated={({ gl, ...rest }) => {
+      onCreated={({ gl }) => {
         gl.domElement.addEventListener('webglcontextlost', (e) => e.preventDefault())
-        onCreated?.({ gl, ...rest })
       }}
     >
       <Suspense fallback={null}>
@@ -90,12 +132,14 @@ export default function BodyScene({ phase, painPoints = [], onRegionClick, onCre
 
       <ambientLight intensity={0.15} color="#001832" />
       <directionalLight intensity={2.2} position={[2, 5, 4]} color="#c8e8ff"
-        castShadow shadow-mapSize={[1024, 1024]} shadow-camera-far={20} />
+        castShadow shadow-mapSize={[1024, 1024]} shadow-camera-far={20}
+        shadow-bias={-0.0005} shadow-normalBias={0.04} />
       <directionalLight intensity={1.3} position={[-3, 0.5, -2.5]} color="#0044cc" />
       <pointLight intensity={1.1} position={[0, 0, 6]} color="#00ccff" distance={12} />
 
       <Environment preset="night" />
-      <SmartOrbitControls phase={phase} />
+      <SmartOrbitControls phase={phase} controlsRef={controlsRef} />
+      {captureRef && <CaptureBridge captureRef={captureRef} controlsRef={controlsRef} />}
     </Canvas>
   )
 }

@@ -30,77 +30,58 @@ function Typewriter({ text, speed = 28, onDone }) {
 }
 
 export default function LandingPhase() {
-  const { startSession, isSpeaking, introMessage, voiceError, micPermission } = useVapi()
+  const {
+    startSession, stopSession, isSpeaking, isConnecting, isConnected, mode,
+    introMessage, voiceError, micPermission, introDone, hasVoice,
+  } = useVapi()
   const { setPhase } = useSession()
-  const [showPrompt,     setShowPrompt]     = useState(false)
-  const [showTypewriter, setShowTypewriter] = useState(false)
-  const [introPlayed,    setIntroPlayed]    = useState(false)
-  const started = useRef(false)
+  const [ready, setReady] = useState(false)        // fade-in delay before first prompt
+  const [requested, setRequested] = useState(false) // user asked for the voice intro
 
   useEffect(() => {
-    if (started.current) return
-    started.current = true
-
-    const timer = setTimeout(() => {
-      const apiKey =
-        process.env.NEXT_PUBLIC_VAPI_API_KEY ||
-        process.env.NEXT_PUBLIC_VAPI_PUBLIC_KEY ||
-        ''
-
-      if (!apiKey) {
-        // No Vapi key — show typewriter fallback after short delay
-        setShowTypewriter(true)
-        return
-      }
-
-      setShowPrompt(true)
-    }, 1000)
-
-    return () => clearTimeout(timer)
+    const t = setTimeout(() => setReady(true), 1000)
+    return () => clearTimeout(t)
   }, [])
 
-  // Also show prompt once the intro finishes speaking
-  useEffect(() => {
-    if (!introPlayed || isSpeaking) return
-    const t = setTimeout(() => setShowPrompt(true), 1200)
-    return () => clearTimeout(t)
-  }, [introPlayed, isSpeaking])
+  // Show the greeting as text when voice isn't configured, or when it failed
+  // (mic blocked, start error).
+  const showText = ready && (!hasVoice || (requested && introDone && Boolean(voiceError)))
 
-  const canClick = showPrompt || showTypewriter
+  const introPlaying = requested && !introDone && (isConnecting || (isConnected && mode === 'intro'))
+  const canBegin = ready && (!hasVoice || introDone || showText)
+  const canEnableMic = ready && hasVoice && !requested
 
-  const handleLandingClick = async () => {
-    if (showTypewriter || introPlayed) {
-      setPhase(PHASES.INTAKE)
-      return
-    }
+  const begin = () => {
+    stopSession()
+    setPhase(PHASES.INTAKE)
+  }
 
-    setShowPrompt(false)
-    const started = await startSession({ isIntro: true })
-    if (started) {
-      setIntroPlayed(true)
-    } else {
-      setShowPrompt(true)
+  const handleClick = async () => {
+    if (canBegin) return begin()
+    if (canEnableMic) {
+      setRequested(true)
+      await startSession({ mode: 'intro' })
     }
   }
 
+  const clickable = canBegin || canEnableMic
+
   return (
     <div
-      onClick={() => { if (showPrompt || showTypewriter) handleLandingClick() }}
+      onClick={clickable ? handleClick : undefined}
       style={{
         position: 'absolute', inset: 0, zIndex: 10,
         display: 'flex', flexDirection: 'column',
         alignItems: 'center',
-        cursor: canClick ? 'pointer' : 'default',
-        pointerEvents: canClick ? 'auto' : 'none',
+        cursor: clickable ? 'pointer' : 'default',
+        pointerEvents: clickable ? 'auto' : 'none',
       }}
     >
-      {/* Subtle scan lines */}
       <div style={{
         position: 'absolute', inset: 0, pointerEvents: 'none',
         background: 'repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(0,208,255,0.008) 3px, rgba(0,208,255,0.008) 4px)',
       }} />
 
-      {/* App name — top left, minimal */}
       <div style={{
         position: 'absolute', top: 28, left: 32,
         fontSize: '12px', letterSpacing: '0.18em', color: 'rgba(0,170,255,0.5)',
@@ -109,27 +90,25 @@ export default function LandingPhase() {
         findmypain
       </div>
 
-      {/* Speaking waveform — bottom-ish, subtle */}
-      {isSpeaking && (
+      {(isSpeaking || introPlaying) && (
         <div style={{
           position: 'absolute', bottom: '22vh',
           display: 'flex', gap: '4px', alignItems: 'center',
         }}>
-          {[0,1,2,3,4].map(i => (
+          {[0, 1, 2, 3, 4].map(i => (
             <div key={i} style={{
               width: '2px', background: '#00aaff', borderRadius: '1px',
-              height: '14px', opacity: 0.7,
-              animation: `waveBar 0.7s ${i * 0.1}s ease-in-out infinite alternate`,
+              height: '14px', opacity: isSpeaking ? 0.7 : 0.3,
+              animation: isSpeaking ? `waveBar 0.7s ${i * 0.1}s ease-in-out infinite alternate` : 'none',
             }} />
           ))}
         </div>
       )}
 
-      {/* Typewriter card — no Vapi key */}
-      {showTypewriter && (
+      {showText && (
         <div style={{
           position: 'absolute', bottom: '20vh',
-          maxWidth: '340px', padding: '0 32px', textAlign: 'center',
+          maxWidth: '360px', padding: '0 24px', textAlign: 'center',
         }}>
           <div style={{
             padding: '16px 20px',
@@ -138,20 +117,17 @@ export default function LandingPhase() {
             borderRadius: '12px',
             backdropFilter: 'blur(10px)',
           }}>
-            <Typewriter
-              text={introMessage}
-              onDone={() => setTimeout(() => setShowPrompt(true), 600)}
-            />
+            <Typewriter text={introMessage} />
           </div>
         </div>
       )}
 
-      {/* Click / tap prompt */}
-      {canClick && (
+      {(clickable || introPlaying) && (
         <div style={{
           position: 'absolute', bottom: '7vh',
           display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px',
-          animation: 'fadePulse 2.8s ease-in-out infinite',
+          padding: '0 16px',
+          animation: introPlaying ? 'none' : 'fadePulse 2.8s ease-in-out infinite',
         }}>
           <div style={{
             width: '44px', height: '44px', borderRadius: '50%',
@@ -167,17 +143,30 @@ export default function LandingPhase() {
             fontSize: '11px', color: 'rgba(160,200,220,0.6)',
             letterSpacing: '0.2em', fontWeight: 400,
           }}>
-            {introPlayed || showTypewriter ? 'tap to begin' : 'enable microphone'}
+            {introPlaying ? 'listening to intro…' : canBegin ? 'tap to begin' : 'tap to enable microphone'}
           </span>
-          {micPermission === 'prompt' && !introPlayed && !showTypewriter && (
+          {canEnableMic && micPermission === 'prompt' && (
             <span style={{ fontSize: '10px', color: '#5a90b0', fontFamily: 'monospace', letterSpacing: '0.08em' }}>
-              Browser will ask for permission
+              your browser will ask for permission
             </span>
           )}
           {voiceError && (
-            <span style={{ maxWidth: '320px', textAlign: 'center', fontSize: '11px', color: '#ef4444', fontFamily: 'monospace', letterSpacing: '0.04em' }}>
+            <span style={{ maxWidth: '320px', textAlign: 'center', fontSize: '11px', color: '#f87171', fontFamily: 'monospace', letterSpacing: '0.04em' }}>
               {voiceError}
             </span>
+          )}
+          {!canBegin && (
+            <button
+              onClick={(e) => { e.stopPropagation(); begin() }}
+              style={{
+                marginTop: '4px', background: 'none', border: 'none', cursor: 'pointer',
+                pointerEvents: 'auto',
+                color: 'rgba(160,200,220,0.45)', fontSize: '11px', letterSpacing: '0.08em',
+                textDecoration: 'underline', textUnderlineOffset: '3px',
+              }}
+            >
+              {introPlaying ? 'skip intro' : 'continue without voice'}
+            </button>
           )}
         </div>
       )}

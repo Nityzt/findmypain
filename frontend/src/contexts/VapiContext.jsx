@@ -1,231 +1,278 @@
 'use client'
 
-import { createContext, useContext, useRef, useState, useCallback } from 'react'
+import { createContext, useContext, useRef, useState, useCallback, useEffect } from 'react'
+import { useSession } from '@/contexts/SessionContext'
+import { interviewerPrompt } from '@/lib/intake'
 
 const VapiContext = createContext(null)
 
-const API_BASE = normalizeApiBase(process.env.NEXT_PUBLIC_API_BASE_URL)
-
-function buildSystemPrompt(intake, painPoints) {
-  const pts = painPoints.map((p) => `${p.region} (${p.severity})`).join(', ') || 'none selected yet'
-  return `You are a warm, friendly medical intake assistant for FindMyPain.
-Your voice is calm and reassuring — think of yourself as a knowledgeable friend, not a clinical robot.
-
-Patient info: ${intake.age ? `${intake.age} years old` : 'age unknown'}, ${intake.biologicalSex || 'sex unknown'}.
-${intake.chronicConditions ? `Chronic conditions: ${intake.chronicConditions}.` : ''}
-${intake.medications ? `Current medications: ${intake.medications}.` : ''}
-${intake.painOnset ? `Pain onset type: ${intake.painOnset}.` : ''}
-
-Selected pain regions: ${pts}.
-
-Your role:
-- Ask ONE focused follow-up question at a time about the pain
-- Cover: duration, severity (1-10), radiation patterns, triggers, associated symptoms (nausea, numbness, etc.)
-- After 4-5 exchanges, wrap up and say you are ready to generate the report
-- NEVER diagnose. Always say "I'd recommend speaking with a doctor about this."
-- Be brief — keep responses under 2 sentences
-- When you have enough info, end your response with: "I think I have enough to generate your report."
-
-Start by briefly acknowledging the pain regions selected and asking the most important first question.`
-}
-
 const INTRO_MESSAGE =
-  "Hi, I'm here to find your pain — select your pain points by clicking on the body and I'll ask you a few questions."
+  "Hi, I'm here to help you find your pain. Tap to begin, mark where it hurts on the body, and I'll ask you a few questions."
 
-function normalizeApiBase(value) {
-  if (!value || value.startsWith('/')) return 'http://localhost:8080'
-  return value
+// Vapi runs the LLM turn itself. Haiku is used for the spoken agent because
+// time-to-first-word matters more than depth here; reasoningEffort unset = off.
+const VOICE_MODEL = { provider: 'anthropic', model: 'claude-haiku-5-5', temperature: 0.4 }
+
+// Fallback voice settings, used only when no dashboard assistant ID is configured.
+const INLINE_VOICE = {
+  transcriber: { provider: 'deepgram', model: 'nova-3', language: 'en' },
+  voice: { provider: '11labs', voiceId: '21m00Tcm4TlvDq8ikWAM' },
 }
 
 function getVapiPublicKey() {
-  return (
-    process.env.NEXT_PUBLIC_VAPI_API_KEY ||
-    process.env.NEXT_PUBLIC_VAPI_PUBLIC_KEY ||
-    ''
-  )
+  return process.env.NEXT_PUBLIC_VAPI_API_KEY || process.env.NEXT_PUBLIC_VAPI_PUBLIC_KEY || ''
 }
 
 function getVapiAssistantId() {
   return process.env.NEXT_PUBLIC_VAPI_ASSISTANT_ID || ''
 }
 
-export function VapiProvider({ children }) {
-  const vapiRef   = useRef(null)
-  const activeRef = useRef(false) // prevent duplicate sessions
+export const hasVoiceConfig = () => Boolean(getVapiPublicKey())
 
-  const [isSpeaking,   setIsSpeaking]   = useState(false)
-  const [isListening,  setIsListening]  = useState(false)
-  const [isConnected,  setIsConnected]  = useState(false)
-  const [hasVapi,      setHasVapi]      = useState(false)
-  const [transcript,   setTranscript]   = useState('')
-  // Last completed utterance from either side — ChatPanel subscribes to sync chat history
-  const [lastMessage,  setLastMessage]  = useState(null) // { role: 'user'|'assistant', content }
+function errorText(err) {
+  if (!err) return 'Voice session failed.'
+  if (typeof err === 'string') return err
+  return (
+    err.error?.message?.msg || err.error?.message || err.errorMsg || err.message ||
+    err.error?.msg || 'Voice session failed.'
+  )
+}
+
+function buildOverrides(mode, intake, painPoints, history) {
+  if (mode === 'intro') {
+    return {
+      firstMessage: INTRO_MESSAGE,
+      firstMessageMode: 'assistant-speaks-first',
+      maxDurationSeconds: 60,
+      model: {
+        ...VOICE_MODEL,
+        maxTokens: 60,
+        messages: [{
+          role: 'system',
+          content: 'You are the FindMyPain greeter. You have already greeted the user. If they speak, reply only with: "Tap the screen when you are ready to begin." Do not ask questions.',
+        }],
+      },
+    }
+  }
+
+  let system = interviewerPrompt(intake, painPoints)
+  if (history.length) {
+    const transcript = history
+      .map((m) => `${m.role === 'user' ? 'Patient' : 'You'}: ${m.content}`)
+      .join('\n')
+    system += `\n\nConversation so far (the patient stepped away and came back):\n${transcript}\n\nContinue from here. Do not repeat questions that were already answered. Start by briefly welcoming them back.`
+  } else {
+    system += '\n\nStart by briefly acknowledging the regions they marked and asking your first question.'
+  }
+
+  return {
+    firstMessageMode: 'assistant-speaks-first-with-model-generated-message',
+    maxDurationSeconds: 900,
+    model: { ...VOICE_MODEL, maxTokens: 250, messages: [{ role: 'system', content: system }] },
+  }
+}
+
+export function VapiProvider({ children }) {
+  const { appendTranscript } = useSession()
+  const vapiRef = useRef(null)
+  const activeRef = useRef(false)       // a call is starting or running
+  const modeRef = useRef(null)          // 'intro' | 'interview'
+  const sessionIdRef = useRef(0)        // ignore results from superseded starts
+  const stoppingRef = useRef(null)      // in-flight vapi.stop() promise
+  const introTimerRef = useRef(null)
+  const appendRef = useRef(appendTranscript)
+  const stopRef = useRef(() => {})
+  useEffect(() => { appendRef.current = appendTranscript }, [appendTranscript])
+
+  const [isSpeaking, setIsSpeaking] = useState(false)
+  const [isListening, setIsListening] = useState(false)
+  const [isConnected, setIsConnected] = useState(false)
+  const [isConnecting, setIsConnecting] = useState(false)
+  const [mode, setMode] = useState(null)
+  const [introDone, setIntroDone] = useState(false)
   const [micPermission, setMicPermission] = useState('prompt')
   const [voiceError, setVoiceError] = useState('')
+
+  const resetCallState = useCallback(() => {
+    activeRef.current = false
+    modeRef.current = null
+    setMode(null)
+    setIsConnected(false)
+    setIsConnecting(false)
+    setIsListening(false)
+    setIsSpeaking(false)
+  }, [])
 
   const requestMicrophone = useCallback(async () => {
     if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
       setMicPermission('unsupported')
-      setVoiceError('Microphone access is not supported in this browser.')
+      setVoiceError('Microphone access is not supported in this browser. You can type instead.')
       return false
     }
-
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
       stream.getTracks().forEach((track) => track.stop())
       setMicPermission('granted')
-      setVoiceError('')
       return true
     } catch (err) {
       const denied = err?.name === 'NotAllowedError' || err?.name === 'PermissionDeniedError'
       setMicPermission(denied ? 'denied' : 'error')
       setVoiceError(
         denied
-          ? 'Microphone permission was denied. Enable mic access in your browser settings and try again.'
-          : 'Could not access your microphone. Check your input device and try again.'
+          ? 'Microphone access was blocked. Allow it in your browser settings, or type instead.'
+          : 'Could not access your microphone. Check your input device, or type instead.'
       )
       return false
     }
   }, [])
 
-  // Lazily load the Vapi SDK — returns null if no API key configured
   const getVapi = useCallback(async () => {
     if (vapiRef.current) return vapiRef.current
     const apiKey = getVapiPublicKey()
-    if (!apiKey) {
-      setVoiceError('Missing NEXT_PUBLIC_VAPI_API_KEY or NEXT_PUBLIC_VAPI_PUBLIC_KEY.')
-      return null
-    }
+    if (!apiKey) return null
     const { default: Vapi } = await import('@vapi-ai/web')
-    const instance = new Vapi(apiKey)
-    vapiRef.current = instance
-    return instance
-  }, [])
+    const vapi = new Vapi(apiKey)
 
-  // Re-attach listeners before each session (cleans up stale handlers)
-  const attachEvents = useCallback((vapi) => {
-    vapi.removeAllListeners?.()
+    // Listeners are attached once; sessionIdRef filters out late events
+    // from a call that has already been replaced.
+    vapi.on('call-start', () => {
+      setIsConnecting(false)
+      setIsConnected(true)
+      setIsListening(true)
+    })
+    vapi.on('call-end', () => {
+      if (modeRef.current === 'intro') setIntroDone(true)
+      resetCallState()
+    })
     vapi.on('speech-start', () => {
+      clearTimeout(introTimerRef.current)
       setIsSpeaking(true)
       setIsListening(false)
     })
-    vapi.on('speech-end',   () => {
+    vapi.on('speech-end', () => {
       setIsSpeaking(false)
-      if (activeRef.current) setIsListening(true)
-    })
-    vapi.on('call-start',   () => { setIsConnected(true); setIsListening(true); setHasVapi(true) })
-    vapi.on('call-end',     () => {
-      setIsConnected(false); setIsListening(false); setIsSpeaking(false)
-      activeRef.current = false
-    })
-    vapi.on('error', (err) => {
-      console.warn('[Vapi] session error:', err?.message || err)
-      setVoiceError(err?.message || 'Voice session failed. Try again.')
-      setIsConnected(false); setIsListening(false); setIsSpeaking(false)
-      activeRef.current = false
-    })
-    vapi.on('message', (msg) => {
-      if (msg.type === 'transcript' && msg.transcriptType === 'final') {
-        setTranscript(msg.transcript)
-        // Broadcast completed utterances so ChatPanel can add them to history
-        if (msg.role === 'user' || msg.role === 'assistant') {
-          setLastMessage({ role: msg.role, content: msg.transcript })
-        }
+      if (!activeRef.current) return
+      setIsListening(true)
+      // The intro is a one-line greeting: hang up once it has been spoken.
+      // The delay keeps a short pause mid-sentence from cutting it off.
+      if (modeRef.current === 'intro') {
+        clearTimeout(introTimerRef.current)
+        introTimerRef.current = setTimeout(() => {
+          if (modeRef.current !== 'intro') return
+          setIntroDone(true)
+          stopRef.current()
+        }, 1500)
       }
     })
-  }, [])
+    vapi.on('error', (err) => {
+      console.warn('[Vapi] session error:', err)
+      setVoiceError(errorText(err))
+      if (modeRef.current === 'intro') setIntroDone(true)
+      resetCallState()
+    })
+    vapi.on('message', (msg) => {
+      if (modeRef.current !== 'interview') return
+      if (msg?.type === 'transcript' && msg.transcriptType === 'final' &&
+          (msg.role === 'user' || msg.role === 'assistant')) {
+        appendRef.current(msg.role, msg.transcript)
+      }
+    })
 
-  const startSession = useCallback(async ({ intake = {}, painPoints = [], isIntro = false } = {}) => {
-    if (activeRef.current) return true   // already in a session
+    vapiRef.current = vapi
+    return vapi
+  }, [resetCallState])
+
+  /**
+   * Starts a voice call. Returns true when the call is starting, false when voice
+   * is unavailable (no key, no mic, start failure) so callers can fall back to text.
+   */
+  const startSession = useCallback(async ({ mode: nextMode = 'interview', intake = {}, painPoints = [], history = [] } = {}) => {
+    if (activeRef.current && modeRef.current === nextMode) return true
     setVoiceError('')
 
-    const hasMic = await requestMicrophone()
-    if (!hasMic) return false
-
-    const vapi = await getVapi()
-    if (!vapi) {
-      console.info('[Vapi] No API key — text-only mode.')
+    if (!getVapiPublicKey()) {
+      if (nextMode === 'intro') setIntroDone(true)
       return false
     }
 
-    // Fully stop any prior call and wait a tick so call-end events settle
-    try { vapi.stop() } catch (_) {}
-    await new Promise(r => setTimeout(r, 300))
+    const hasMic = await requestMicrophone()
+    if (!hasMic) {
+      if (nextMode === 'intro') setIntroDone(true)
+      return false
+    }
 
+    const vapi = await getVapi()
+    if (activeRef.current) stopRef.current()
+    // Let a previous call finish ending, so its call-end can't reset this one.
+    if (stoppingRef.current) await stoppingRef.current
+
+    const id = ++sessionIdRef.current
     activeRef.current = true
-    attachEvents(vapi)
+    modeRef.current = nextMode
+    setMode(nextMode)
+    setIsConnecting(true)
 
-    const systemPrompt = isIntro
-      ? `You are a warm medical intake assistant for FindMyPain.
-Say exactly this opening and nothing else: "${INTRO_MESSAGE}"
-Do not ask any follow-up questions yet.`
-      : buildSystemPrompt(intake, painPoints)
+    const overrides = buildOverrides(nextMode, intake, painPoints, history)
+    const assistantId = getVapiAssistantId()
 
     try {
-      const assistantConfig = {
-        name: 'FindMyPain AI',
-        // firstMessage tells Vapi to speak this immediately without waiting for user input
-        firstMessage: isIntro ? INTRO_MESSAGE : undefined,
-        transcriber: { provider: 'deepgram', model: 'nova-2', language: 'en-US' },
-        model: {
-          provider: 'anthropic',
-          // Valid Vapi model IDs for Anthropic — haiku-4-5 is not recognized by Vapi
-          model: 'claude-3-5-haiku-20241022',
-          messages: [{ role: 'system', content: systemPrompt }],
-          maxTokens: isIntro ? 60 : 200,
-          temperature: 0.4,
-        },
-        voice: {
-          provider: '11labs',
-          voiceId: '21m00Tcm4TlvDq8ikWAM', // Rachel
-        },
-      }
-
-      const assistantId = getVapiAssistantId()
-      if (assistantId) {
-        await vapi.start(assistantId)
-      } else {
-        await vapi.start(assistantConfig)
+      const call = assistantId
+        ? await vapi.start(assistantId, overrides)
+        : await vapi.start({ name: 'FindMyPain', ...INLINE_VOICE, ...overrides })
+      if (id !== sessionIdRef.current) return false
+      if (!call) {
+        // start() resolves null after reporting the failure on the error event
+        resetCallState()
+        return false
       }
       return true
     } catch (err) {
-      console.warn('[Vapi] Could not start session:', err?.message || err)
-      setVoiceError(err?.message || 'Could not start the voice assistant.')
-      activeRef.current = false
+      console.warn('[Vapi] Could not start session:', err)
+      if (id === sessionIdRef.current) {
+        setVoiceError(errorText(err))
+        if (nextMode === 'intro') setIntroDone(true)
+        resetCallState()
+      }
       return false
     }
-  }, [getVapi, attachEvents, requestMicrophone])
+  }, [getVapi, requestMicrophone, resetCallState])
 
   const stopSession = useCallback(() => {
+    sessionIdRef.current++
+    clearTimeout(introTimerRef.current)
     const vapi = vapiRef.current
-    if (vapi) try { vapi.stop() } catch (_) {}
-    setIsConnected(false); setIsSpeaking(false); setIsListening(false)
-    activeRef.current = false
-  }, [])
-
-  const sendMessage = useCallback(async (text) => {
-    const vapi = vapiRef.current
-    if (vapi && isConnected) {
-      vapi.send({ type: 'add-message', message: { role: 'user', content: text } })
-      return
-    }
-    try {
-      const res = await fetch(`${API_BASE}/api/analyze`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: text }),
+    const wasActive = activeRef.current
+    resetCallState()
+    if (vapi && wasActive) {
+      const p = vapi.stop().catch(() => {}).finally(() => {
+        if (stoppingRef.current === p) stoppingRef.current = null
       })
-      return res.ok ? res.json() : null
-    } catch {
-      return null
+      stoppingRef.current = p
     }
+  }, [resetCallState])
+  useEffect(() => { stopRef.current = stopSession }, [stopSession])
+
+  /** Sends a typed message into the live call; the agent answers by voice. */
+  const sendToCall = useCallback((text) => {
+    const vapi = vapiRef.current
+    if (!vapi || !isConnected || modeRef.current !== 'interview') return false
+    vapi.send({ type: 'add-message', message: { role: 'user', content: text } })
+    return true
   }, [isConnected])
+
+  // Hang up if the page is closed mid-call.
+  useEffect(() => {
+    const onUnload = () => { try { vapiRef.current?.stop() } catch { /* ignore */ } }
+    window.addEventListener('beforeunload', onUnload)
+    return () => window.removeEventListener('beforeunload', onUnload)
+  }, [])
 
   return (
     <VapiContext.Provider value={{
-      isSpeaking, isListening, isConnected, hasVapi, transcript, lastMessage,
-      micPermission, voiceError,
-      requestMicrophone, startSession, stopSession, sendMessage,
+      isSpeaking, isListening, isConnected, isConnecting, mode, introDone,
+      micPermission, voiceError, setVoiceError,
+      hasVoice: hasVoiceConfig(),
+      startSession, stopSession, sendToCall,
       introMessage: INTRO_MESSAGE,
     }}>
       {children}

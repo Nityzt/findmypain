@@ -88,6 +88,15 @@ input[type="number"]::-webkit-outer-spin-button {
     min-height: 300px;
   }
 
+  .bc-root.bc-chat .bc-canvas {
+    flex: 0 0 30vh !important;
+    min-height: 200px;
+  }
+
+  .bc-root.bc-chat .bc-panel {
+    min-height: 70dvh;
+  }
+
   .bc-panel {
     flex: none !important;
     width: 100% !important;

@@ -15,17 +15,28 @@ export default function PainSelectPhase() {
     }}>
       {/* Subtle top hint */}
       <div style={{
-        padding: '20px 24px 0',
-        pointerEvents: 'none',
+        padding: '18px 20px 0',
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px',
       }}>
         <p style={{
           fontSize: '12px',
-          color: 'rgba(160,200,220,0.4)',
+          color: 'rgba(160,200,220,0.55)',
           fontWeight: 300, margin: 0,
           letterSpacing: '0.06em',
         }}>
-          tap the body to mark your pain
+          tap the body to mark where it hurts · drag to rotate
         </p>
+        <button
+          onClick={() => setPhase(PHASES.INTAKE)}
+          style={{
+            pointerEvents: 'auto', flexShrink: 0,
+            background: 'none', border: '1px solid rgba(0,170,255,0.15)', borderRadius: '6px',
+            color: 'rgba(160,200,220,0.55)', fontSize: '11px', letterSpacing: '0.08em',
+            padding: '5px 10px', cursor: 'pointer',
+          }}
+        >
+          ← edit details
+        </button>
       </div>
 
       {/* Bottom bar */}

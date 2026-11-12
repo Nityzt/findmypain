@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback } from 'react'
+import { useCallback, useRef } from 'react'
 import dynamic from 'next/dynamic'
 import { SessionProvider, VapiProvider } from './Providers'
 import { useSession, PHASES } from '@/contexts/SessionContext'
@@ -14,7 +14,8 @@ import ChatPhase from './phases/ChatPhase'
 const ReportPhase = dynamic(() => import('./phases/ReportPhase'), { ssr: false })
 
 function AppLayout() {
-  const { phase, painPoints, addPainPoint, setScreenshot } = useSession()
+  const { phase, setPhase, painPoints, addPainPoint, setScreenshot } = useSession()
+  const captureRef = useRef(null)
 
   const isChat  = phase === PHASES.CHAT
   const isReport = phase === PHASES.REPORT
@@ -23,17 +24,21 @@ function AppLayout() {
     addPainPoint(region, point3D)
   }, [addPainPoint])
 
-  const handleCreated = useCallback(({ gl }) => {
-    // Capture canvas screenshot for PDF embedding
-    setTimeout(() => {
-      const screenshot = gl.domElement.toDataURL('image/png')
-      setScreenshot(screenshot)
-    }, 2000)
-  }, [setScreenshot])
+  // Snapshot the body (with pain markers) for the PDF while the canvas is
+  // still visible, then switch to the report screen.
+  const goToReport = useCallback(() => {
+    try {
+      const shot = captureRef.current?.()
+      if (shot) setScreenshot(shot)
+    } catch (err) {
+      console.warn('[Report] could not capture body image', err)
+    }
+    setPhase(PHASES.REPORT)
+  }, [setPhase, setScreenshot])
 
   return (
     <div
-      className="bc-root"
+      className={`bc-root${isChat ? ' bc-chat' : ''}`}
       style={{
         display: 'flex',
         width: '100vw',
@@ -67,7 +72,7 @@ function AppLayout() {
           phase={phase}
           painPoints={painPoints}
           onRegionClick={handleRegionClick}
-          onCreated={handleCreated}
+          captureRef={captureRef}
         />
 
         {/* Phase overlays */}
@@ -89,7 +94,7 @@ function AppLayout() {
             flexDirection: 'column',
           }}
         >
-          <ChatPhase />
+          <ChatPhase onReadyForReport={goToReport} />
         </div>
       )}
 

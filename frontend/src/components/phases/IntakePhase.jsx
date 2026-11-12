@@ -4,13 +4,6 @@ import { useState } from 'react'
 import { useSession, PHASES } from '@/contexts/SessionContext'
 import { useVapi } from '@/contexts/VapiContext'
 
-function normalizeApiBase(value) {
-  if (!value || value.startsWith('/')) return 'http://localhost:8080'
-  return value
-}
-
-const API_BASE = normalizeApiBase(process.env.NEXT_PUBLIC_API_BASE_URL)
-
 const pillBtn = (active) => ({
   padding: '7px 18px',
   border: `1px solid ${active ? 'rgba(0,170,255,0.6)' : 'rgba(0,170,255,0.15)'}`,
@@ -30,43 +23,23 @@ const inputStyle = {
 }
 
 export default function IntakePhase() {
-  const { setIntake, setPhase, setSessionId } = useSession()
+  const { intake, setIntake, setPhase } = useSession()
   const { stopSession } = useVapi()
-  const [form, setForm] = useState({
-    age: '',
-    biologicalSex: '',
-    painOnset: '',
-    chronicConditions: '',
-    medications: '',
-  })
-  const [submitting, setSubmitting] = useState(false)
-  const [showOptional, setShowOptional] = useState(false)
+  const [form, setForm] = useState(intake)
+  const [showOptional, setShowOptional] = useState(
+    Boolean(intake.painOnset || intake.chronicConditions || intake.medications)
+  )
 
-  const isValid = form.age && form.biologicalSex
+  const ageNum = Number(form.age)
+  const ageValid = form.age !== '' && Number.isInteger(ageNum) && ageNum >= 1 && ageNum <= 120
+  const isValid = ageValid && form.biologicalSex
   const update = (key, val) => setForm((p) => ({ ...p, [key]: val }))
 
-  const handleSubmit = async () => {
-    if (!isValid || submitting) return
-    setSubmitting(true)
-    setIntake(form)
+  const handleSubmit = () => {
+    if (!isValid) return
     stopSession()
-
-    try {
-      const res = await fetch(`${API_BASE}/api/session/start`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
-      })
-      if (res.ok) {
-        const data = await res.json()
-        setSessionId(data.sessionId)
-      }
-    } catch {
-      console.warn('[Intake] Backend unavailable, continuing offline')
-    }
-
+    setIntake(form)
     setPhase(PHASES.PAIN_SELECT)
-    setSubmitting(false)
   }
 
   return (
@@ -106,9 +79,13 @@ export default function IntakePhase() {
             type="number" min="1" max="120"
             value={form.age}
             onChange={(e) => update('age', e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') handleSubmit() }}
             placeholder="Your age"
             style={inputStyle}
           />
+          {form.age !== '' && !ageValid && (
+            <p style={{ fontSize: '11px', color: '#f87171', margin: '6px 0 0' }}>enter an age between 1 and 120</p>
+          )}
         </div>
 
         {/* Biological Sex */}
@@ -183,7 +160,7 @@ export default function IntakePhase() {
         {/* Submit */}
         <button
           onClick={handleSubmit}
-          disabled={!isValid || submitting}
+          disabled={!isValid}
           style={{
             width: '100%', padding: '13px',
             background: isValid ? 'rgba(0,100,220,0.18)' : 'transparent',
@@ -196,7 +173,7 @@ export default function IntakePhase() {
             backdropFilter: 'blur(8px)',
           }}
         >
-          {submitting ? 'starting...' : 'mark your pain points →'}
+          mark your pain points →
         </button>
       </div>
     </div>
