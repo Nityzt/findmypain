@@ -100,6 +100,8 @@ export async function POST(request) {
       system: SYSTEM,
       schema: ReportSchema,
       temperature: 0.2,
+      attemptTimeoutMs: 25000,
+      deadlineMs: 50000,
       messages: [{
         role: 'user',
         content: `<intake>\n${describePatient(intake)}\n</intake>\n\n<marked_regions>\n${describeRegions(painPoints)}\n</marked_regions>\n\n<transcript>\n${transcript}\n</transcript>`,

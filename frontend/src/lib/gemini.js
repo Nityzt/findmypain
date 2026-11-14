@@ -55,66 +55,90 @@ function toContents(messages) {
  * Runs one Gemini call constrained to `schema` and returns the validated
  * object. Throws with a short, key-free reason when the output can't be used.
  *
- * maxOutputTokens is generous on purpose: on thinking-capable Flash models the
- * thinking tokens count against it, and a tight cap truncates the JSON.
+ * Latency matters (Vercel functions are capped), so thinking is kept low,
+ * each attempt is time-boxed, and the whole call has a deadline.
  */
-export async function generateStructured({ system, messages, schema, maxOutputTokens = 8192, temperature = 0.4 }) {
+export async function generateStructured({
+  system, messages, schema,
+  maxOutputTokens = 8192, temperature = 0.4,
+  thinkingLevel = 'LOW', attemptTimeoutMs = 12000, deadlineMs = 24000,
+}) {
   const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY })
-  const config = {
+  const baseConfig = {
     systemInstruction: system,
     temperature,
     maxOutputTokens,
     responseMimeType: 'application/json',
     responseJsonSchema: jsonSchemaFor(schema),
+    httpOptions: { timeout: attemptTimeoutMs },
   }
   const contents = toContents(messages)
+  const started = Date.now()
+  const timeLeft = () => deadlineMs - (Date.now() - started)
+
+  const call = async (model) => {
+    try {
+      return await ai.models.generateContent({
+        model, contents, config: { ...baseConfig, thinkingConfig: { thinkingLevel } },
+      })
+    } catch (error) {
+      // Some models don't accept a thinking level: retry once without it.
+      if (error instanceof ApiError && error.status === 400 && /thinking/i.test(error.message)) {
+        return ai.models.generateContent({ model, contents, config: baseConfig })
+      }
+      throw error
+    }
+  }
 
   let lastError = null
   let allBusy = true
   // Two passes: if every model was merely busy, wait briefly and retry once.
   for (let pass = 0; pass < 2; pass++) {
-  if (pass === 1) {
-    if (!allBusy) break
-    await new Promise((r) => setTimeout(r, 1200))
-  }
-  for (const model of candidateModels()) {
-    try {
-      const response = await ai.models.generateContent({ model, contents, config })
-      workingModel = model
-      const finish = response.candidates?.[0]?.finishReason
-      const text = response.text
-      if (!text) {
-        throw new GeminiOutputError(`${model}: empty response (finishReason ${finish ?? 'unknown'}, block ${response.promptFeedback?.blockReason ?? 'none'})`)
-      }
-      let json
+    if (pass === 1) {
+      if (!allBusy || timeLeft() < attemptTimeoutMs) break
+      await new Promise((r) => setTimeout(r, 1000))
+    }
+    for (const model of candidateModels()) {
+      if (timeLeft() < 3000) break
       try {
-        json = JSON.parse(text)
-      } catch {
-        throw new GeminiOutputError(`${model}: response was not valid JSON (finishReason ${finish ?? 'unknown'}, ${text.length} chars)`)
+        const response = await call(model)
+        workingModel = model
+        const finish = response.candidates?.[0]?.finishReason
+        const text = response.text
+        if (!text) {
+          throw new GeminiOutputError(`${model}: empty response (finishReason ${finish ?? 'unknown'}, block ${response.promptFeedback?.blockReason ?? 'none'})`)
+        }
+        let json
+        try {
+          json = JSON.parse(text)
+        } catch {
+          throw new GeminiOutputError(`${model}: response was not valid JSON (finishReason ${finish ?? 'unknown'}, ${text.length} chars)`)
+        }
+        const parsed = schema.safeParse(json)
+        if (!parsed.success) {
+          const issue = parsed.error.issues[0]
+          throw new GeminiOutputError(`${model}: JSON failed validation at ${issue?.path?.join('.') || '(root)'}: ${issue?.message}`)
+        }
+        return parsed.data
+      } catch (error) {
+        if (error instanceof GeminiOutputError) throw error
+        lastError = error
+        // Unknown model, overloaded / rate-limited, or too slow: try the next
+        // candidate. Anything else (bad key, bad request) is final.
+        const status = error instanceof ApiError ? error.status : 0
+        const unknownModel = (status === 404 || status === 400) && /model/i.test(error.message)
+        const busy = status === 429 || status === 500 || status === 503
+        const timedOut = error?.name === 'AbortError' || error?.name === 'TimeoutError' || /abort|timed? ?out/i.test(error?.message ?? '')
+        if (unknownModel || busy || timedOut) {
+          console.warn(`[gemini] ${model} failed (${status || error?.name}), trying next model`)
+          if (workingModel === model) workingModel = null
+          if (!busy) allBusy = false
+          if (timedOut) lastError = new Error(`${model} timed out after ${attemptTimeoutMs}ms`)
+          continue
+        }
+        throw error
       }
-      const parsed = schema.safeParse(json)
-      if (!parsed.success) {
-        const issue = parsed.error.issues[0]
-        throw new GeminiOutputError(`${model}: JSON failed validation at ${issue?.path?.join('.') || '(root)'}: ${issue?.message}`)
-      }
-      return parsed.data
-    } catch (error) {
-      if (error instanceof GeminiOutputError) throw error
-      lastError = error
-      // Unknown model for this key, or the model is overloaded / rate-limited:
-      // try the next candidate. Anything else (bad key, bad request) is final.
-      const status = error instanceof ApiError ? error.status : 0
-      const unknownModel = (status === 404 || status === 400) && /model/i.test(error.message)
-      const busy = status === 429 || status === 500 || status === 503
-      if (unknownModel || busy) {
-        console.warn(`[gemini] ${model} failed (${status}), trying next model`)
-        if (workingModel === model) workingModel = null
-        if (!busy) allBusy = false
-        continue
-      }
-      throw error
     }
   }
-  }
-  throw lastError ?? new Error('No Gemini model available')
+  throw lastError ?? new Error('No Gemini model answered in time')
 }

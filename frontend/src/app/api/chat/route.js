@@ -8,7 +8,7 @@ import {
 // Text-mode counterpart of the voice agent: same interviewer prompt, used when
 // the microphone is unavailable or the patient prefers typing.
 
-export const maxDuration = 30
+export const maxDuration = 60
 
 const ReplySchema = z.object({
   reply: z.string().describe('What the assistant says next: one or two short sentences.'),
