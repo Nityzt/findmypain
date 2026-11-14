@@ -63,7 +63,7 @@ function toContents(messages) {
 export async function generateStructured({
   system, messages, schema,
   maxOutputTokens = 8192, temperature = 0.4,
-  thinkingLevel = 'LOW', attemptTimeoutMs = 9000, deadlineMs = 24000,
+  thinkingLevel = 'LOW', attemptTimeoutMs = 10000, deadlineMs = 24000, // Gemini rejects deadlines under 10s
 }) {
   const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY })
   const baseConfig = {
