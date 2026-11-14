@@ -3,9 +3,10 @@ import { GoogleGenAI, ApiError } from '@google/genai'
 import { z } from 'zod'
 
 // Server-side Gemini helper for the text chat and report routes.
-// GEMINI_MODEL picks the model; if it is not available to this key we fall
-// back to the rolling "latest Flash" alias, then to a long-lived Flash model.
-const FALLBACK_MODELS = ['gemini-3.5-flash', 'gemini-flash-latest', 'gemini-2.5-flash']
+// GEMINI_MODEL picks the model; if it is unavailable or overloaded we fall
+// back through newer Flash models and the rolling "latest Flash" alias.
+// (gemini-2.5-flash is closed to new API keys.)
+const FALLBACK_MODELS = ['gemini-3.8-flash', 'gemini-3.5-flash', 'gemini-flash-latest']
 
 let workingModel = null
 
@@ -69,6 +70,13 @@ export async function generateStructured({ system, messages, schema, maxOutputTo
   const contents = toContents(messages)
 
   let lastError = null
+  let allBusy = true
+  // Two passes: if every model was merely busy, wait briefly and retry once.
+  for (let pass = 0; pass < 2; pass++) {
+  if (pass === 1) {
+    if (!allBusy) break
+    await new Promise((r) => setTimeout(r, 1200))
+  }
   for (const model of candidateModels()) {
     try {
       const response = await ai.models.generateContent({ model, contents, config })
@@ -101,10 +109,12 @@ export async function generateStructured({ system, messages, schema, maxOutputTo
       if (unknownModel || busy) {
         console.warn(`[gemini] ${model} failed (${status}), trying next model`)
         if (workingModel === model) workingModel = null
+        if (!busy) allBusy = false
         continue
       }
       throw error
     }
+  }
   }
   throw lastError ?? new Error('No Gemini model available')
 }
