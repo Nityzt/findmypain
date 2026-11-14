@@ -38,6 +38,7 @@ const SYSTEM = `You prepare a pre-appointment pain summary for FindMyPain. A pat
 
 Rules:
 - Only report what the patient actually said. When something was not discussed, write "${NOT_MENTIONED}". Do not invent details.
+- If the patient explicitly denied something (e.g. "it doesn't spread", "no numbness"), record that as "None" or "Denies numbness or tingling", not "${NOT_MENTIONED}". A statement the patient made applies to every region it clearly covers.
 - Produce one entry in "regions" for every marked region, in the order given, using the region names exactly as given. Add a region only if the patient clearly described pain somewhere else.
 - Never give a diagnosis, medication names or doses. Considerations are broad categories for a clinician to evaluate.
 - Urgency: "high" if there are red-flag symptoms (for example chest pain with breathlessness, sudden severe headache, one-sided weakness or numbness, fainting, heavy bleeding, loss of bladder or bowel control, high fever with severe pain); "moderate" for significant, worsening or persistent pain that should be seen soon; otherwise "low".`
