@@ -93,9 +93,14 @@ export async function generateStructured({ system, messages, schema, maxOutputTo
     } catch (error) {
       if (error instanceof GeminiOutputError) throw error
       lastError = error
-      // Unknown model for this key/region: try the next candidate.
-      if (error instanceof ApiError && (error.status === 404 || error.status === 400) && /model/i.test(error.message)) {
-        console.warn(`[gemini] model ${model} unavailable (${error.status}), trying next`)
+      // Unknown model for this key, or the model is overloaded / rate-limited:
+      // try the next candidate. Anything else (bad key, bad request) is final.
+      const status = error instanceof ApiError ? error.status : 0
+      const unknownModel = (status === 404 || status === 400) && /model/i.test(error.message)
+      const busy = status === 429 || status === 500 || status === 503
+      if (unknownModel || busy) {
+        console.warn(`[gemini] ${model} failed (${status}), trying next model`)
+        if (workingModel === model) workingModel = null
         continue
       }
       throw error
