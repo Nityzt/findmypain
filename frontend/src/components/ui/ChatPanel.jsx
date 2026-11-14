@@ -26,7 +26,7 @@ export default function ChatPanel({ onReadyForReport }) {
   const { intake, painPoints, chatHistory, addMessage } = useSession()
   const {
     isSpeaking, isListening, isConnected, isConnecting, mode, hasVoice,
-    startSession, stopSession, sendToCall, voiceError, setVoiceError,
+    startSession, stopSession, sendToCall, voiceError, setVoiceError, micPermission,
   } = useVapi()
   const [inputText, setInputText] = useState('')
   const [isTyping, setIsTyping] = useState(false)
@@ -65,9 +65,16 @@ export default function ChatPanel({ onReadyForReport }) {
     }
   }, [startSession, intake, painPoints, fetchReply])
 
-  // On entering the chat: try voice, fall back to text.
+  // On entering the chat: use voice only if the patient already allowed the
+  // mic (they enabled it on the landing screen). Otherwise start in text and
+  // let them opt in with the mic button, rather than blocking on a browser
+  // permission prompt they may not notice.
   useEffect(() => {
-    startVoiceOrText()
+    if (micPermission === 'granted') {
+      startVoiceOrText()
+    } else if (!historyRef.current.some((m) => m.role === 'assistant')) {
+      fetchReply(historyRef.current)
+    }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // The agent signals it has enough detail by ending its latest turn with a
