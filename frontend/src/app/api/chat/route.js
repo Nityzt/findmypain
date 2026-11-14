@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { generateStructured, hasGemini } from '@/lib/gemini'
+import { generateStructured, hasGemini, failureReason } from '@/lib/gemini'
 import {
   interviewerPrompt, sanitizeHistory, sanitizeIntake, sanitizePainPoints,
   describeRegions, findRedFlags, REPORT_READY_PHRASE,
@@ -52,7 +52,7 @@ export async function POST(request) {
   const history = sanitizeHistory(body.history)
 
   if (!hasGemini()) {
-    return Response.json({ ...scriptedReply(history, painPoints), source: 'scripted' })
+    return Response.json({ ...scriptedReply(history, painPoints), source: 'scripted', reason: 'GEMINI_API_KEY not set' })
   }
 
   // The model needs a user turn first; the opening question has none yet.
@@ -70,14 +70,11 @@ export async function POST(request) {
       system: interviewerPrompt(intake, painPoints),
       messages,
       schema: ReplySchema,
-      maxOutputTokens: 1024,
     })
-    if (!result?.reply) {
-      return Response.json({ ...scriptedReply(history, painPoints), source: 'scripted' })
-    }
     return Response.json({ ...result, source: 'gemini' })
   } catch (error) {
-    console.error('[api/chat] Gemini error', error?.status ?? '', error?.message ?? error)
-    return Response.json({ ...scriptedReply(history, painPoints), source: 'scripted' })
+    const reason = failureReason(error)
+    console.error('[api/chat] Gemini failed:', reason)
+    return Response.json({ ...scriptedReply(history, painPoints), source: 'scripted', reason })
   }
 }

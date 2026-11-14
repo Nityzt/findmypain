@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { generateStructured, hasGemini } from '@/lib/gemini'
+import { generateStructured, hasGemini, failureReason } from '@/lib/gemini'
 import {
   describePatient, describeRegions, sanitizeHistory, sanitizeIntake,
   sanitizePainPoints, findRedFlags,
@@ -84,7 +84,11 @@ export async function POST(request) {
   const history = sanitizeHistory(body.history)
 
   if (!hasGemini() || history.length === 0) {
-    return Response.json({ report: fallbackReport(intake, painPoints, history), source: 'fallback' })
+    return Response.json({
+      report: fallbackReport(intake, painPoints, history),
+      source: 'fallback',
+      reason: hasGemini() ? 'no conversation yet' : 'GEMINI_API_KEY not set',
+    })
   }
 
   const transcript = history
@@ -95,19 +99,16 @@ export async function POST(request) {
     const report = await generateStructured({
       system: SYSTEM,
       schema: ReportSchema,
-      maxOutputTokens: 4096,
       temperature: 0.2,
       messages: [{
         role: 'user',
         content: `<intake>\n${describePatient(intake)}\n</intake>\n\n<marked_regions>\n${describeRegions(painPoints)}\n</marked_regions>\n\n<transcript>\n${transcript}\n</transcript>`,
       }],
     })
-    if (!report) {
-      return Response.json({ report: fallbackReport(intake, painPoints, history), source: 'fallback' })
-    }
     return Response.json({ report, source: 'gemini' })
   } catch (error) {
-    console.error('[api/report] Gemini error', error?.status ?? '', error?.message ?? error)
-    return Response.json({ report: fallbackReport(intake, painPoints, history), source: 'fallback' })
+    const reason = failureReason(error)
+    console.error('[api/report] Gemini failed:', reason)
+    return Response.json({ report: fallbackReport(intake, painPoints, history), source: 'fallback', reason })
   }
 }

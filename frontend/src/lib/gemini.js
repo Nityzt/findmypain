@@ -9,6 +9,19 @@ const FALLBACK_MODELS = ['gemini-3.5-flash', 'gemini-flash-latest', 'gemini-2.5-
 
 let workingModel = null
 
+export class GeminiOutputError extends Error {}
+
+/** A short, loggable reason for a fallback; never includes the API key. */
+export function failureReason(error) {
+  const status = error?.status ? `${error.status} ` : ''
+  let message = error?.message ?? String(error)
+  try {
+    const parsed = JSON.parse(message)
+    message = parsed?.error?.message ?? message
+  } catch { /* not JSON */ }
+  return `${status}${message}`.slice(0, 240)
+}
+
 export function hasGemini() {
   return Boolean(process.env.GEMINI_API_KEY)
 }
@@ -39,9 +52,12 @@ function toContents(messages) {
 
 /**
  * Runs one Gemini call constrained to `schema` and returns the validated
- * object, or null if the model output could not be used.
+ * object. Throws with a short, key-free reason when the output can't be used.
+ *
+ * maxOutputTokens is generous on purpose: on thinking-capable Flash models the
+ * thinking tokens count against it, and a tight cap truncates the JSON.
  */
-export async function generateStructured({ system, messages, schema, maxOutputTokens = 2048, temperature = 0.4 }) {
+export async function generateStructured({ system, messages, schema, maxOutputTokens = 8192, temperature = 0.4 }) {
   const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY })
   const config = {
     systemInstruction: system,
@@ -57,15 +73,25 @@ export async function generateStructured({ system, messages, schema, maxOutputTo
     try {
       const response = await ai.models.generateContent({ model, contents, config })
       workingModel = model
+      const finish = response.candidates?.[0]?.finishReason
       const text = response.text
-      if (!text) return null
-      const parsed = schema.safeParse(JSON.parse(text))
+      if (!text) {
+        throw new GeminiOutputError(`${model}: empty response (finishReason ${finish ?? 'unknown'}, block ${response.promptFeedback?.blockReason ?? 'none'})`)
+      }
+      let json
+      try {
+        json = JSON.parse(text)
+      } catch {
+        throw new GeminiOutputError(`${model}: response was not valid JSON (finishReason ${finish ?? 'unknown'}, ${text.length} chars)`)
+      }
+      const parsed = schema.safeParse(json)
       if (!parsed.success) {
-        console.warn(`[gemini] ${model} returned JSON that failed validation`, parsed.error.issues.slice(0, 3))
-        return null
+        const issue = parsed.error.issues[0]
+        throw new GeminiOutputError(`${model}: JSON failed validation at ${issue?.path?.join('.') || '(root)'}: ${issue?.message}`)
       }
       return parsed.data
     } catch (error) {
+      if (error instanceof GeminiOutputError) throw error
       lastError = error
       // Unknown model for this key/region: try the next candidate.
       if (error instanceof ApiError && (error.status === 404 || error.status === 400) && /model/i.test(error.message)) {
