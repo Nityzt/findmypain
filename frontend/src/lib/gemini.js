@@ -4,9 +4,11 @@ import { z } from 'zod'
 
 // Server-side Gemini helper for the text chat and report routes.
 // GEMINI_MODEL picks the model; if it is unavailable or overloaded we fall
-// back through newer Flash models and the rolling "latest Flash" alias.
+// back through the list below. Flash-Lite goes first: in testing (Nov 2026)
+// it answered in ~1s while the full Flash models returned 503/504 under load,
+// and it is plenty for short intake questions and summarisation.
 // (gemini-2.5-flash is closed to new API keys.)
-const FALLBACK_MODELS = ['gemini-3.8-flash', 'gemini-3.5-flash', 'gemini-flash-latest']
+const FALLBACK_MODELS = ['gemini-3.1-flash-lite', 'gemini-3.8-flash', 'gemini-3.5-flash', 'gemini-flash-latest']
 
 let workingModel = null
 
@@ -61,7 +63,7 @@ function toContents(messages) {
 export async function generateStructured({
   system, messages, schema,
   maxOutputTokens = 8192, temperature = 0.4,
-  thinkingLevel = 'LOW', attemptTimeoutMs = 12000, deadlineMs = 24000,
+  thinkingLevel = 'LOW', attemptTimeoutMs = 9000, deadlineMs = 24000,
 }) {
   const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY })
   const baseConfig = {
@@ -127,7 +129,7 @@ export async function generateStructured({
         // candidate. Anything else (bad key, bad request) is final.
         const status = error instanceof ApiError ? error.status : 0
         const unknownModel = (status === 404 || status === 400) && /model/i.test(error.message)
-        const busy = status === 429 || status === 500 || status === 503
+        const busy = status === 429 || status === 500 || status === 503 || status === 504
         const timedOut = error?.name === 'AbortError' || error?.name === 'TimeoutError' || /abort|timed? ?out/i.test(error?.message ?? '')
         if (unknownModel || busy || timedOut) {
           console.warn(`[gemini] ${model} failed (${status || error?.name}), trying next model`)
