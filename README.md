@@ -36,3 +36,7 @@ Selected body regions and intake answers guide the interview. The conversation i
 AI responses are validated against a defined schema. Scripted questions and a basic summary provide fallbacks when Gemini is unavailable.
 
 > **For appointment preparation.** FindMyPain helps communicate symptoms; it does not provide a diagnosis.
+
+## License
+
+[MIT](LICENSE) © 2026 Nit
