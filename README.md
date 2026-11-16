@@ -1,20 +1,38 @@
+<div align="center">
+
 # FindMyPain
 
-FindMyPain helps people describe their pain and prepare for a doctor's appointment. It combines an interactive body map with a guided conversation, turning symptoms into a clear report to share with a clinician.
+**Describe your pain. Prepare for your appointment.**
 
-## What it does
+An interactive body map and guided conversation that turn symptoms into a clear report to share with a clinician.
 
-- Collects basic health context, including when the pain began, existing conditions, and medications.
-- Lets users mark painful areas on a rotatable 3D body.
-- Asks follow-up questions through text or voice about severity, sensation, triggers, and related symptoms.
-- Produces a downloadable PDF with a symptom summary, details by body region, warning signs mentioned, and questions to ask a doctor.
+</div>
+
+---
 
 ## Why it exists
 
-Pain can be difficult to explain, especially during a short appointment. FindMyPain helps users organize what they are experiencing beforehand, so they can bring a clearer account to the conversation with their clinician. It supports communication and appointment preparation; it does not provide a diagnosis.
+Pain can be difficult to explain, especially during a short appointment. FindMyPain helps people organize what they are experiencing beforehand, so they can bring a clearer account to their clinician.
+
+## What it does
+
+1. **Share the context** — Record when the pain began, existing conditions, and medications.
+2. **Mark the pain** — Select painful areas on a rotatable 3D body.
+3. **Talk it through** — Answer questions by text or voice about severity, sensation, triggers, and related symptoms.
+4. **Take a report** — Download a PDF with a symptom summary, details by body region, warning signs mentioned, and questions for the doctor.
 
 ## How it works
 
-The web app uses Next.js and React, with Three.js and React Three Fiber for the body map. Selected regions and intake answers give context to the interview. Vapi handles voice conversations, while server-side Gemini calls power text interviews and turn the conversation into a structured report.
+Selected body regions and intake answers guide the interview. The conversation is then organized into a structured report.
 
-Responses are validated against a defined schema, and scripted questions and a basic summary provide fallbacks when Gemini is unavailable. The PDF is generated in the browser with React PDF.
+| Part | Powered by |
+| --- | --- |
+| Web experience | Next.js & React |
+| Interactive body map | Three.js & React Three Fiber |
+| Voice conversations | Vapi |
+| Text interviews & report generation | Server-side Gemini calls |
+| Downloadable reports | React PDF, generated in the browser |
+
+AI responses are validated against a defined schema. Scripted questions and a basic summary provide fallbacks when Gemini is unavailable.
+
+> **For appointment preparation.** FindMyPain helps communicate symptoms; it does not provide a diagnosis.
