@@ -11,21 +11,21 @@ const URGENCY = {
 }
 
 const styles = StyleSheet.create({
-  page: { backgroundColor: '#ffffff', paddingVertical: 36, paddingHorizontal: 44, fontFamily: 'Helvetica', fontSize: 10, color: '#1a2a3a' },
-  header: { borderBottom: '2 solid #0055cc', paddingBottom: 10, marginBottom: 16, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' },
-  title: { fontSize: 20, fontFamily: 'Helvetica-Bold', color: '#0033aa', letterSpacing: 1 },
-  subtitle: { fontSize: 10, color: '#5580aa', marginTop: 3 },
-  date: { fontSize: 10, color: '#6688aa' },
+  page: { backgroundColor: '#ffffff', paddingVertical: 36, paddingHorizontal: 44, fontFamily: 'Helvetica', fontSize: 10, color: '#2B2118' },
+  header: { borderBottom: '2 solid #0F766E', paddingBottom: 10, marginBottom: 16, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' },
+  title: { fontSize: 20, fontFamily: 'Helvetica-Bold', color: '#0B5F58', letterSpacing: 1 },
+  subtitle: { fontSize: 10, color: '#6B5D50', marginTop: 3 },
+  date: { fontSize: 10, color: '#6B5D50' },
   section: { marginBottom: 14 },
-  sectionTitle: { fontSize: 9, fontFamily: 'Helvetica-Bold', color: '#0055cc', letterSpacing: 1.2, marginBottom: 6, textTransform: 'uppercase', borderBottom: '0.5 solid #ddeeff', paddingBottom: 3 },
+  sectionTitle: { fontSize: 9, fontFamily: 'Helvetica-Bold', color: '#0F766E', letterSpacing: 1.2, marginBottom: 6, textTransform: 'uppercase', borderBottom: '0.5 solid #D6EEEA', paddingBottom: 3 },
   row: { flexDirection: 'row', marginBottom: 3 },
-  label: { width: 100, fontSize: 9.5, color: '#6688aa', fontFamily: 'Helvetica-Bold' },
-  value: { flex: 1, fontSize: 9.5, color: '#1a2a3a' },
+  label: { width: 100, fontSize: 9.5, color: '#6B5D50', fontFamily: 'Helvetica-Bold' },
+  value: { flex: 1, fontSize: 9.5, color: '#2B2118' },
   muted: { flex: 1, fontSize: 9.5, color: '#9aaabb' },
-  painCard: { border: '0.5 solid #ccdded', borderRadius: 4, paddingVertical: 6, paddingHorizontal: 10, marginBottom: 6, backgroundColor: '#f7faff' },
-  painRegion: { fontSize: 11, fontFamily: 'Helvetica-Bold', color: '#003388', marginBottom: 4 },
+  painCard: { border: '0.5 solid #EADCCB', borderRadius: 4, paddingVertical: 6, paddingHorizontal: 10, marginBottom: 6, backgroundColor: '#FFF9F2' },
+  painRegion: { fontSize: 11, fontFamily: 'Helvetica-Bold', color: '#0B5F58', marginBottom: 4 },
   bullet: { flexDirection: 'row', marginBottom: 3 },
-  bulletDot: { width: 14, color: '#0055cc' },
+  bulletDot: { width: 14, color: '#0F766E' },
   bulletText: { flex: 1, fontSize: 9.5, lineHeight: 1.4 },
   bodyImage: { width: 150, height: 167, objectFit: 'contain', borderRadius: 4 },
   disclaimer: { marginTop: 16, paddingVertical: 8, paddingHorizontal: 12, backgroundColor: '#fff8f0', border: '0.5 solid #f59e0b', borderRadius: 4, fontSize: 8.5, color: '#7a5a20', lineHeight: 1.5 },
@@ -171,7 +171,7 @@ export default function ReportDocument({ intake, painPoints, chatHistory, report
           <Header subtitle="Conversation transcript" date={date} />
           {chatHistory.map((msg, i) => (
             <View key={i} style={{ marginBottom: 6 }} wrap={false}>
-              <Text style={{ fontSize: 8.5, color: msg.role === 'user' ? '#003388' : '#006644', fontFamily: 'Helvetica-Bold', marginBottom: 1 }}>
+              <Text style={{ fontSize: 8.5, color: msg.role === 'user' ? '#0B5F58' : '#006644', fontFamily: 'Helvetica-Bold', marginBottom: 1 }}>
                 {msg.role === 'user' ? 'PATIENT' : 'ASSISTANT'}
               </Text>
               <Text style={{ fontSize: 9.5, lineHeight: 1.45, paddingLeft: 8 }}>{msg.content}</Text>

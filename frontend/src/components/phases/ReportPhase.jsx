@@ -4,29 +4,29 @@ import { useState, useEffect, useCallback } from 'react'
 import { pdf } from '@react-pdf/renderer'
 import { useSession, PHASES } from '@/contexts/SessionContext'
 import ReportDocument from '@/components/ui/ReportDocument'
+import Button, { cx } from '@/components/ui/Button'
+import {
+  Alert, ArrowLeft, Download, Info, List, Pin, Question, Refresh, Sparkle, Steps, User,
+} from '@/components/ui/icons'
 
 const NOT_MENTIONED = 'Not mentioned'
 
 const URGENCY = {
-  low: { color: '#22c55e', label: 'low' },
-  moderate: { color: '#f59e0b', label: 'moderate' },
-  high: { color: '#ef4444', label: 'high — seek care soon' },
+  low: { label: 'Low urgency', note: 'Book a routine appointment.', box: 'bg-good-soft border-good', dot: 'bg-good', text: 'text-good' },
+  moderate: { label: 'Moderate urgency', note: 'Try to see a doctor soon.', box: 'bg-warn-soft border-warn', dot: 'bg-marigold', text: 'text-warn' },
+  high: { label: 'High urgency — seek care soon', note: '', box: 'bg-pain-soft border-pain', dot: 'bg-pain', text: 'text-pain-ink' },
 }
 
-function SectionCard({ label, children }) {
+function SectionCard({ icon: Icon, label, children, tint = 'bg-teal-soft text-teal', delay = 0 }) {
   return (
-    <section style={{
-      background: 'rgba(6,14,30,0.7)',
-      border: '1px solid rgba(0,170,255,0.1)',
-      borderRadius: '10px',
-      padding: '16px 18px',
-      marginBottom: '12px',
-    }}>
-      <h2 style={{
-        fontSize: '10px', color: 'rgba(0,170,255,0.6)',
-        letterSpacing: '0.15em', margin: '0 0 12px',
-        fontWeight: 400, textTransform: 'uppercase',
-      }}>
+    <section
+      className=" rounded-3xl border border-line bg-white p-5 shadow-warm sm:p-6"
+      style={{ animationDelay: `${delay}ms` }}
+    >
+      <h2 className="mb-4 flex items-center gap-2.5 text-[15px] font-semibold text-ink">
+        <span className={cx('flex size-8 items-center justify-center rounded-xl', tint)}>
+          <Icon size={17} />
+        </span>
         {label}
       </h2>
       {children}
@@ -37,22 +37,52 @@ function SectionCard({ label, children }) {
 function Row({ label, value }) {
   const missing = !value || value === NOT_MENTIONED
   return (
-    <div style={{ display: 'flex', gap: '12px', marginBottom: '5px' }}>
-      <span style={{ width: '110px', fontSize: '12px', color: 'rgba(160,200,220,0.45)', flexShrink: 0, fontWeight: 300 }}>{label}</span>
-      <span style={{ fontSize: '12px', color: missing ? 'rgba(160,200,220,0.3)' : '#9dc8e4', fontWeight: 300, fontStyle: missing ? 'italic' : 'normal' }}>
-        {missing ? 'not mentioned' : value}
-      </span>
+    <div className="grid grid-cols-[minmax(80px,0.8fr)_minmax(0,1.2fr)] gap-3 border-b border-line py-2 text-[15px] last:border-0">
+      <dt className="text-muted">{label}</dt>
+      <dd className={cx('min-w-0 [overflow-wrap:anywhere]', missing ? 'italic text-muted' : 'text-ink')}>{missing ? 'Not mentioned' : value}</dd>
     </div>
   )
 }
 
 function BulletList({ items, numbered }) {
-  return items.map((d, i) => (
-    <div key={i} style={{ display: 'flex', gap: '10px', marginBottom: '7px', alignItems: 'flex-start' }}>
-      <span style={{ color: 'rgba(0,170,255,0.6)', fontSize: '12px', minWidth: '14px' }}>{numbered ? `${i + 1}.` : '·'}</span>
-      <span style={{ fontSize: '13px', color: '#9dc8e4', fontWeight: 300, lineHeight: '1.55' }}>{d}</span>
+  const Tag = numbered ? 'ol' : 'ul'
+  return (
+    <Tag className="space-y-2.5">
+      {items.map((d, i) => (
+        <li key={i} className="flex items-start gap-3 text-[15px] leading-relaxed text-ink">
+          {numbered ? (
+            <span className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full bg-teal-soft text-xs font-bold text-teal">{i + 1}</span>
+          ) : (
+            <span aria-hidden="true" className="mt-[9px] size-1.5 shrink-0 rounded-full bg-peach" />
+          )}
+          <span>{d}</span>
+        </li>
+      ))}
+    </Tag>
+  )
+}
+
+function Skeleton() {
+  const bar = 'rounded-full bg-cream-deep'
+  return (
+    <div role="status" aria-label="Creating your report" className="space-y-4">
+      <div className="flex items-center gap-3 rounded-3xl bg-white p-5 shadow-warm">
+        <span className="flex size-10 items-center justify-center rounded-full bg-marigold-soft text-warn"><Sparkle size={20} /></span>
+        <div>
+          <p className="font-semibold text-ink">Putting your report together…</p>
+          <p className="text-sm text-muted">Summarising what you told us. This takes a few seconds.</p>
+        </div>
+      </div>
+      {[0, 1, 2].map((i) => (
+        <div key={i} className="space-y-3 rounded-3xl bg-white p-6">
+          <div className={cx(bar, 'h-4 w-1/3')} />
+          <div className={cx(bar, 'h-3 w-full')} />
+          <div className={cx(bar, 'h-3 w-5/6')} />
+          <div className={cx(bar, 'h-3 w-2/3')} />
+        </div>
+      ))}
     </div>
-  ))
+  )
 }
 
 export default function ReportPhase() {
@@ -63,32 +93,39 @@ export default function ReportPhase() {
   const [pdfState, setPdfState] = useState('idle')
   const data = report?.data
 
-  const fetchReport = useCallback(async () => {
-    setLoading(true)
-    setError('')
-    try {
-      const res = await fetch('/api/report', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          intake,
-          painPoints: painPoints.map((p) => ({ region: p.region })),
-          history: chatHistory.map(({ role, content }) => ({ role, content })),
-        }),
-      })
-      if (!res.ok) throw new Error(`report request failed: ${res.status}`)
-      const json = await res.json()
-      setReport(json.report, chatHistory.length)
-    } catch (err) {
+  // Fetches the structured summary; state is only set in the promise callbacks.
+  const loadReport = useCallback(async () => {
+    const res = await fetch('/api/report', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        intake,
+        painPoints: painPoints.map((p) => ({ region: p.region })),
+        history: chatHistory.map(({ role, content }) => ({ role, content })),
+      }),
+    })
+    if (!res.ok) throw new Error(`report request failed: ${res.status}`)
+    const json = await res.json()
+    return json.report
+  }, [intake, painPoints, chatHistory])
+
+  const settle = useCallback((promise) => promise
+    .then((r) => setReport(r, chatHistory.length))
+    .catch((err) => {
       console.warn('[Report] generation failed', err)
       setError('Could not generate the report. Check your connection and try again.')
-    } finally {
-      setLoading(false)
-    }
-  }, [intake, painPoints, chatHistory, setReport])
+    })
+    .finally(() => setLoading(false)), [chatHistory.length, setReport])
 
+  const fetchReport = () => {
+    setLoading(true)
+    setError('')
+    settle(loadReport())
+  }
+
+  // The initial state already shows the loader.
   useEffect(() => {
-    if (needsFetch) fetchReport()
+    if (needsFetch) settle(loadReport())
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const downloadPdf = async () => {
@@ -119,197 +156,153 @@ export default function ReportPhase() {
     }
   }
 
-  const urgency = URGENCY[data?.urgency] || { color: '#00aaff', label: 'unknown' }
+  const urgency = URGENCY[data?.urgency]
   const regionDetails = data?.regions?.length ? data.regions : painPoints.map((p) => ({ region: p.region }))
+  const today = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
 
   return (
-    <div style={{
-      position: 'absolute', inset: 0, zIndex: 30,
-      background: '#030a16',
-      overflowY: 'auto',
-      animation: 'fadeIn 0.4s ease forwards',
-    }}>
-      <div style={{ maxWidth: '680px', margin: '0 auto', padding: '28px 16px 80px' }}>
-
-        <div style={{ marginBottom: '24px', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px' }}>
+    <div className="report-surface scrollbar-soft relative z-10 min-h-0 flex-1 overflow-y-auto">
+      <div className="mx-auto max-w-[720px] px-4 pb-10 pt-2 sm:px-6 sm:pt-4">
+        <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
           <div>
-            <p style={{ fontSize: '11px', color: 'rgba(0,170,255,0.5)', letterSpacing: '0.12em', marginBottom: '5px', marginTop: 0 }}>
-              findmypain
-            </p>
-            <h1 style={{ fontSize: '22px', color: '#d4eeff', fontWeight: 300, margin: 0, letterSpacing: '-0.01em' }}>
-              Pain Report
-            </h1>
-            <p style={{ fontSize: '12px', color: 'rgba(160,200,220,0.45)', margin: '4px 0 0', fontWeight: 300 }}>
-              {new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
-            </p>
+            <p className="text-sm font-medium text-muted">{today}</p>
+            <h1 className="font-display text-[34px] leading-tight font-semibold tracking-[-0.025em] text-ink sm:text-[40px]">Your pain report</h1>
           </div>
-          <button
-            onClick={() => setPhase(PHASES.CHAT)}
-            style={{
-              background: 'none', border: '1px solid rgba(0,170,255,0.18)',
-              borderRadius: '6px', color: 'rgba(160,200,220,0.6)',
-              fontSize: '11px', letterSpacing: '0.08em',
-              cursor: 'pointer', padding: '6px 11px',
-              transition: 'all 0.2s', marginTop: '4px', flexShrink: 0,
-            }}
-          >
-            ← add more detail
-          </button>
+          <Button variant="secondary" size="sm" onClick={() => setPhase(PHASES.CHAT)} iconLeft={<ArrowLeft size={16} />}>
+            Add more detail
+          </Button>
         </div>
 
         {loading ? (
-          <div style={{ textAlign: 'center', padding: '70px 0' }}>
-            <div style={{
-              width: '32px', height: '32px',
-              border: '1px solid rgba(0,208,255,0.15)',
-              borderTop: '1px solid #00d0ff', borderRadius: '50%',
-              animation: 'spin 1s linear infinite',
-              margin: '0 auto 14px',
-            }} />
-            <p style={{ color: 'rgba(90,144,176,0.6)', fontSize: '13px', fontWeight: 300 }}>
-              summarising your conversation…
-            </p>
-          </div>
+          <Skeleton />
         ) : error || !data ? (
-          <div style={{ textAlign: 'center', padding: '60px 0' }}>
-            <p style={{ color: '#f87171', fontSize: '13px' }}>{error || 'No report yet.'}</p>
-            <button
-              onClick={fetchReport}
-              style={{ marginTop: '10px', background: 'none', border: '1px solid rgba(0,170,255,0.3)', borderRadius: '8px', color: '#7dd4f8', padding: '8px 16px', cursor: 'pointer' }}
-            >
-              try again
-            </button>
+          <div role="alert" className="flex flex-col items-center gap-4 rounded-3xl bg-white px-6 py-12 text-center shadow-warm">
+            <span className="flex size-12 items-center justify-center rounded-full bg-pain-soft text-pain-ink"><Alert size={22} /></span>
+            <p className="max-w-sm text-[15px] text-ink">{error || 'There’s no report yet.'}</p>
+            <Button onClick={fetchReport} iconLeft={<Refresh size={17} />}>Try again</Button>
           </div>
         ) : (
-          <>
-            <div style={{
-              padding: '12px 16px', borderRadius: '10px',
-              border: `1px solid ${urgency.color}40`,
-              background: `${urgency.color}0d`,
-              marginBottom: '16px',
-              display: 'flex', alignItems: 'flex-start', gap: '10px',
-            }}>
-              <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: urgency.color, flexShrink: 0, marginTop: '6px', boxShadow: `0 0 8px ${urgency.color}` }} />
-              <div>
-                <p style={{ fontSize: '10px', color: 'rgba(160,200,220,0.45)', margin: '0 0 2px', letterSpacing: '0.1em' }}>urgency</p>
-                <p style={{ fontSize: '14px', color: urgency.color, margin: 0, letterSpacing: '0.06em' }}>{urgency.label}</p>
-                {data.urgencyReason && (
-                  <p style={{ fontSize: '12px', color: 'rgba(200,220,235,0.6)', margin: '4px 0 0', fontWeight: 300, lineHeight: 1.5 }}>{data.urgencyReason}</p>
-                )}
+          <div className="space-y-4">
+            {urgency && (
+              <div className={cx('flex items-start gap-3.5 rounded-3xl border p-5', urgency.box)}>
+                <span className="relative mt-1.5 flex size-3 shrink-0">
+                  <span className={cx('relative size-3 rounded-full', urgency.dot)} />
+                </span>
+                <div>
+                  <p className={cx('text-lg font-semibold', urgency.text)}>{urgency.label}</p>
+                  <p className="mt-0.5 text-[15px] leading-relaxed text-ink">{data.urgencyReason || urgency.note}</p>
+                </div>
               </div>
-            </div>
+            )}
 
             {data.redFlags?.length > 0 && (
-              <div style={{
-                padding: '12px 16px', borderRadius: '10px', marginBottom: '12px',
-                border: '1px solid rgba(239,68,68,0.35)', background: 'rgba(239,68,68,0.06)',
-              }}>
-                <p style={{ fontSize: '10px', color: '#f87171', margin: '0 0 8px', letterSpacing: '0.15em', textTransform: 'uppercase' }}>warning signs mentioned</p>
+              <div role="alert" className=" rounded-3xl border-2 border-pain bg-white p-5">
+                <p className="mb-3 flex items-center gap-2 font-semibold text-pain-ink">
+                  <Alert size={19} /> Warning signs you mentioned
+                </p>
                 <BulletList items={data.redFlags} />
-                <p style={{ fontSize: '12px', color: '#fca5a5', margin: '6px 0 0', fontWeight: 300 }}>
+                <p className="mt-3 rounded-2xl bg-pain-soft px-4 py-2.5 text-sm font-medium text-pain-ink">
                   If these are severe, sudden, or getting worse, seek emergency care now.
                 </p>
               </div>
             )}
 
             {data.summary && (
-              <SectionCard label="summary">
-                <p style={{ fontSize: '13px', color: '#bde0fa', fontWeight: 300, lineHeight: 1.65, margin: 0 }}>{data.summary}</p>
+              <SectionCard icon={Sparkle} label="Summary" tint="bg-marigold-soft text-warn" delay={60}>
+                <p className="text-[16px] leading-relaxed text-ink">{data.summary}</p>
               </SectionCard>
             )}
 
-            <SectionCard label="patient">
-              <Row label="Age" value={intake?.age} />
-              <Row label="Sex" value={intake?.biologicalSex} />
-              {intake?.painOnset && <Row label="Onset" value={intake.painOnset} />}
-              <Row label="Conditions" value={intake?.chronicConditions || 'None reported'} />
-              <Row label="Medications" value={intake?.medications || 'None reported'} />
-            </SectionCard>
+            <div className="grid gap-4 md:grid-cols-[1fr_200px]">
+              <SectionCard icon={User} label="About you" delay={100}>
+                <dl>
+                  <Row label="Age" value={intake?.age} />
+                  <Row label="Sex" value={intake?.biologicalSex} />
+                  {intake?.painOnset && <Row label="Onset" value={intake.painOnset} />}
+                  <Row label="Conditions" value={intake?.chronicConditions || 'None reported'} />
+                  <Row label="Medications" value={intake?.medications || 'None reported'} />
+                </dl>
+              </SectionCard>
+              {canvasScreenshot && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={canvasScreenshot}
+                  alt={`Body figure with ${painPoints.length} marked area${painPoints.length === 1 ? '' : 's'}`}
+                  className="hidden h-full max-h-[300px] w-full rounded-3xl border border-line bg-cream object-contain shadow-warm md:block"
+                />
+              )}
+            </div>
 
-            <SectionCard label={`pain regions · ${regionDetails.length}`}>
-              {regionDetails.map((r, i) => (
-                <div key={`${r.region}-${i}`} style={{
-                  padding: '10px 0',
-                  borderBottom: i < regionDetails.length - 1 ? '1px solid rgba(0,170,255,0.08)' : 'none',
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-                    <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#ef4444', boxShadow: '0 0 5px rgba(239,68,68,0.7)' }} />
-                    <span style={{ fontSize: '14px', color: '#d4eeff', fontWeight: 400 }}>{r.region}</span>
+            <SectionCard icon={Pin} label={`Where it hurts · ${regionDetails.length}`} tint="bg-pain-soft text-pain-ink" delay={140}>
+              <div className="space-y-4">
+                {regionDetails.map((r, i) => (
+                  <div key={`${r.region}-${i}`} className="rounded-2xl bg-cream p-4">
+                    <p className="mb-1 flex items-center gap-2 font-semibold text-ink">
+                      <span className="size-2.5 rounded-full bg-pain" /> {r.region}
+                    </p>
+                    <dl>
+                      <Row label="Started" value={r.onset} />
+                      <Row label="Feels like" value={r.character} />
+                      <Row label="Severity" value={r.severity} />
+                      <Row label="Spreads to" value={r.radiation} />
+                      <Row label="Worse with" value={r.aggravating} />
+                      <Row label="Better with" value={r.relieving} />
+                      <Row label="Other symptoms" value={r.associated} />
+                    </dl>
                   </div>
-                  <Row label="Started" value={r.onset} />
-                  <Row label="Feels like" value={r.character} />
-                  <Row label="Severity" value={r.severity} />
-                  <Row label="Spreads to" value={r.radiation} />
-                  <Row label="Worse with" value={r.aggravating} />
-                  <Row label="Better with" value={r.relieving} />
-                  <Row label="Other symptoms" value={r.associated} />
-                </div>
-              ))}
+                ))}
+              </div>
             </SectionCard>
 
             {data.considerations?.length > 0 && (
-              <SectionCard label="possibilities for your clinician to consider">
+              <SectionCard icon={List} label="Possibilities for your doctor to consider" delay={180}>
                 <BulletList items={data.considerations} />
               </SectionCard>
             )}
 
             {data.questionsForDoctor?.length > 0 && (
-              <SectionCard label="questions to ask your doctor">
+              <SectionCard icon={Question} label="Questions to ask your doctor" tint="bg-marigold-soft text-warn" delay={220}>
                 <BulletList items={data.questionsForDoctor} />
               </SectionCard>
             )}
 
             {data.nextSteps?.length > 0 && (
-              <SectionCard label="suggested next steps">
+              <SectionCard icon={Steps} label="Suggested next steps" delay={260}>
                 <BulletList items={data.nextSteps} numbered />
               </SectionCard>
             )}
 
-            <div style={{
-              padding: '12px 14px', borderRadius: '8px',
-              background: 'rgba(245,158,11,0.05)',
-              border: '1px solid rgba(245,158,11,0.18)',
-              fontSize: '12px', color: 'rgba(214,170,90,0.85)', lineHeight: '1.65',
-              marginBottom: '20px', fontWeight: 300,
-            }}>
-              This report is AI-generated from your own description and is for informational purposes only. It is not medical advice, diagnosis, or treatment. Please consult a qualified healthcare professional.
+            <p className="flex items-start gap-2.5 rounded-2xl bg-warn-soft px-4 py-3 text-sm leading-relaxed text-warn">
+              <Info size={17} className="mt-0.5 shrink-0" />
+              This report is AI-generated from your own description and is for information only. It is not medical advice, a diagnosis or treatment. Please talk to a qualified healthcare professional.
+            </p>
+
+            {/* Actions */}
+            <div className="sticky bottom-3 z-10 pt-2">
+              <div className="report-actions flex gap-2 rounded-full border border-white bg-white p-1.5 shadow-lift ">
+                <Button
+                  size="lg"
+                  className="min-w-0 flex-1 px-5"
+                  onClick={downloadPdf}
+                  loading={pdfState === 'working'}
+                  iconLeft={<Download size={19} />}
+                >
+                  {pdfState === 'working' ? 'Preparing PDF…' : (
+                    <>
+                      <span className="sm:hidden">Download PDF</span>
+                      <span className="hidden sm:inline">Download PDF for your doctor</span>
+                    </>
+                  )}
+                </Button>
+                <Button size="lg" variant="quiet" className="px-5" onClick={() => window.location.reload()} iconLeft={<Refresh size={18} />}>
+                  Start over
+                </Button>
+              </div>
+              {pdfState === 'error' && (
+                <p role="alert" className="mt-2 text-center text-sm font-medium text-pain-ink">Couldn’t create the PDF. Please try again.</p>
+              )}
             </div>
-
-            <button
-              onClick={downloadPdf}
-              disabled={pdfState === 'working'}
-              style={{
-                width: '100%', padding: '14px',
-                background: 'rgba(0,80,200,0.18)',
-                border: '1px solid rgba(0,170,255,0.45)',
-                borderRadius: '10px',
-                color: '#7dd4f8', fontSize: '13px',
-                letterSpacing: '0.08em',
-                cursor: pdfState === 'working' ? 'wait' : 'pointer',
-                transition: 'all 0.2s',
-              }}
-            >
-              {pdfState === 'working' ? 'preparing pdf…' : '↓ download pdf for your doctor'}
-            </button>
-            {pdfState === 'error' && (
-              <p style={{ color: '#f87171', fontSize: '12px', textAlign: 'center' }}>Could not create the PDF. Please try again.</p>
-            )}
-
-            <button
-              onClick={() => window.location.reload()}
-              style={{
-                width: '100%', padding: '11px', marginTop: '10px',
-                background: 'none',
-                border: '1px solid rgba(0,170,255,0.12)',
-                borderRadius: '10px',
-                color: 'rgba(160,200,220,0.45)',
-                fontSize: '12px', letterSpacing: '0.06em',
-                cursor: 'pointer', fontWeight: 300,
-              }}
-            >
-              start a new session
-            </button>
-          </>
+          </div>
         )}
       </div>
     </div>

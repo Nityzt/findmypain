@@ -1,5 +1,11 @@
 'use client'
 
+// The full WebGL body, shown when the patient picks "3D" on the stage toggle.
+// The default "Lite" view is the sprite-stacked body in
+// components/body/SpriteBody.jsx, sliced from this same model
+// (scripts/build-body-slices.mjs). Both store pain markers in this scene's
+// world space, so switching keeps them.
+
 import { Canvas, useThree } from '@react-three/fiber'
 import { OrbitControls, Environment } from '@react-three/drei'
 import { Suspense, useRef, useEffect } from 'react'

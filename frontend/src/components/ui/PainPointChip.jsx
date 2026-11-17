@@ -1,39 +1,31 @@
 'use client'
 
-export default function PainPointChip({ region, onRemove }) {
+import { cx } from './Button'
+import { X } from './icons'
+
+export default function PainPointChip({ region, onRemove, size = 'md' }) {
   return (
-    <span style={{
-      display: 'inline-flex',
-      alignItems: 'center',
-      gap: '5px',
-      padding: '3px 10px',
-      background: 'rgba(0,40,90,0.4)',
-      border: '1px solid rgba(0,170,255,0.2)',
-      borderRadius: '20px',
-      fontSize: '12px',
-      color: 'rgba(125,212,248,0.85)',
-      whiteSpace: 'nowrap',
-      fontWeight: 300,
-      backdropFilter: 'blur(4px)',
-    }}>
-      <span style={{
-        width: '5px', height: '5px', borderRadius: '50%',
-        background: '#ef4444', display: 'inline-block',
-        boxShadow: '0 0 5px rgba(239,68,68,0.7)',
-        animation: 'pulse 2s ease-in-out infinite',
-        flexShrink: 0,
-      }} />
-      {region}
+    <span
+      className={cx(
+        'inline-flex items-center gap-2 whitespace-nowrap rounded-full border border-pain bg-white text-ink ',
+        size === 'sm' ? 'h-8 pl-2.5 text-[13px]' : 'h-10 pl-3 text-sm',
+        onRemove ? 'pr-1' : size === 'sm' ? 'pr-3' : 'pr-4',
+      )}
+    >
+      <span className="relative flex size-2.5 shrink-0">
+        <span className="relative size-2.5 rounded-full bg-pain" />
+      </span>
+      <span className="font-medium">{region}</span>
       {onRemove && (
         <button
+          type="button"
           onClick={() => onRemove(region)}
-          style={{
-            background: 'none', border: 'none', cursor: 'pointer',
-            color: 'rgba(160,200,220,0.4)', fontSize: '13px', lineHeight: 1,
-            padding: '0 1px', marginLeft: '1px',
-            transition: 'color 0.2s',
-          }}
-        >×</button>
+          aria-label={`Remove ${region}`}
+          title={`Remove ${region}`}
+          className="ml-0.5 inline-flex size-8 items-center justify-center rounded-full text-muted transition-none hover:bg-pain-soft hover:text-pain-ink focus-visible:outline-2 focus-visible:outline-teal"
+        >
+          <X size={15} strokeWidth={2.4} />
+        </button>
       )}
     </span>
   )

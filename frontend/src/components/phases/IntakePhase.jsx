@@ -1,181 +1,150 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useSession, PHASES } from '@/contexts/SessionContext'
 import { useVapi } from '@/contexts/VapiContext'
+import Button from '@/components/ui/Button'
+import { TextField, ChoicePills } from '@/components/ui/Fields'
+import { ArrowRight, ArrowLeft } from '@/components/ui/icons'
 
-const pillBtn = (active) => ({
-  padding: '7px 18px',
-  border: `1px solid ${active ? 'rgba(0,170,255,0.6)' : 'rgba(0,170,255,0.15)'}`,
-  borderRadius: '20px',
-  background: active ? 'rgba(0,170,255,0.1)' : 'transparent',
-  color: active ? '#7dd4f8' : 'rgba(160,200,220,0.45)',
-  fontSize: '13px', cursor: 'pointer',
-  transition: 'all 0.2s',
-})
-
-const inputStyle = {
-  width: '100%', padding: '9px 14px', boxSizing: 'border-box',
-  background: 'rgba(0,12,28,0.5)',
-  border: '1px solid rgba(0,170,255,0.12)', borderRadius: '8px',
-  color: '#c8e8ff', fontSize: '14px', outline: 'none',
-  fontWeight: 300,
-}
+const CARDS = 2
 
 export default function IntakePhase() {
   const { intake, setIntake, setPhase } = useSession()
   const { stopSession } = useVapi()
   const [form, setForm] = useState(intake)
-  const [showOptional, setShowOptional] = useState(
-    Boolean(intake.painOnset || intake.chronicConditions || intake.medications)
-  )
+  const [card, setCard] = useState(0)
+  const [touchedAge, setTouchedAge] = useState(false)
+  const ageRef = useRef(null)
+  const firstOptionalRef = useRef(null)
 
   const ageNum = Number(form.age)
   const ageValid = form.age !== '' && Number.isInteger(ageNum) && ageNum >= 1 && ageNum <= 120
-  const isValid = ageValid && form.biologicalSex
+  const aboutValid = ageValid && Boolean(form.biologicalSex)
   const update = (key, val) => setForm((p) => ({ ...p, [key]: val }))
+  const hasOptional = Boolean(form.painOnset || form.chronicConditions.trim() || form.medications.trim())
 
-  const handleSubmit = () => {
-    if (!isValid) return
+  // Focus the first field on desktop; on touch screens this would pop the
+  // keyboard over the card before the patient has read it.
+  useEffect(() => {
+    if (!window.matchMedia?.('(pointer: fine)').matches) return
+    const el = card === 0 ? ageRef.current : firstOptionalRef.current
+    el?.focus({ preventScroll: true })
+  }, [card])
+
+  const next = () => {
+    setTouchedAge(true)
+    if (aboutValid) setCard(1)
+  }
+
+  const submit = () => {
+    if (!aboutValid) { setCard(0); return }
     stopSession()
     setIntake(form)
     setPhase(PHASES.PAIN_SELECT)
   }
 
+  const showAgeError = (touchedAge || form.age.length >= 3) && form.age !== '' && !ageValid
+
   return (
-    <div style={{
-      position: 'absolute', inset: 0, zIndex: 20,
-      display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
-      background: 'linear-gradient(to top, rgba(3,10,22,0.98) 55%, transparent)',
-      animation: 'slideUp 0.45s cubic-bezier(0.4,0,0.2,1) forwards',
-    }}>
-      <div style={{
-        width: '100%', maxWidth: '420px',
-        padding: '28px 24px 32px',
-        marginBottom: '4vh',
-      }}>
-        {/* Heading */}
-        <div style={{ marginBottom: '22px' }}>
-          <p style={{
-            fontSize: '13px', color: 'rgba(0,170,255,0.4)',
-            letterSpacing: '0.12em', marginBottom: '6px', fontWeight: 400,
-          }}>
-            before we begin
-          </p>
-          <h2 style={{
-            fontSize: '22px', color: '#d4eeff', fontWeight: 300,
-            letterSpacing: '-0.01em', margin: 0,
-          }}>
-            Tell us about yourself
-          </h2>
+    <form
+      className="flex min-h-0 flex-1 flex-col"
+      onSubmit={(e) => { e.preventDefault(); if (card === 0) { next() } else { submit() } }}
+      noValidate
+    >
+      {/* Progress within this step */}
+      <div className="flex items-center gap-3 px-6 pt-6 sm:px-8 sm:pt-8">
+        <div className="flex flex-1 gap-1.5" aria-hidden="true">
+          {Array.from({ length: CARDS }).map((_, i) => (
+            <span key={i} className="h-1.5 flex-1 overflow-hidden rounded-full bg-cream-deep">
+              <span className={`block h-full rounded-full bg-teal transition-transform duration-500 ${i <= card ? 'w-full' : 'w-0'}`} />
+            </span>
+          ))}
         </div>
+        <span className="text-xs font-semibold text-muted">{card + 1} of {CARDS}</span>
+      </div>
 
-        {/* Age */}
-        <div style={{ marginBottom: '16px' }}>
-          <label style={{ fontSize: '11px', color: 'rgba(160,200,220,0.5)', display: 'block', marginBottom: '6px', letterSpacing: '0.08em' }}>
-            age
-          </label>
-          <input
-            type="number" min="1" max="120"
-            value={form.age}
-            onChange={(e) => update('age', e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') handleSubmit() }}
-            placeholder="Your age"
-            style={inputStyle}
-          />
-          {form.age !== '' && !ageValid && (
-            <p style={{ fontSize: '11px', color: '#f87171', margin: '6px 0 0' }}>enter an age between 1 and 120</p>
-          )}
-        </div>
+      <div className="panel-scroll scrollbar-soft min-h-0 flex-1 overflow-y-auto px-6 pb-4 pt-5 sm:px-8">
+        {card === 0 ? (
+          <div key="about">
+            <h2 className="font-display text-[28px] leading-tight font-semibold tracking-[-0.02em]">A little about you</h2>
+            <p className="mt-1.5 text-[15px] text-muted">This helps the questions fit you. Just two things.</p>
 
-        {/* Biological Sex */}
-        <div style={{ marginBottom: '20px' }}>
-          <label style={{ fontSize: '11px', color: 'rgba(160,200,220,0.5)', display: 'block', marginBottom: '8px', letterSpacing: '0.08em' }}>
-            biological sex
-          </label>
-          <div style={{ display: 'flex', gap: '8px' }}>
-            {['Male', 'Female', 'Other'].map((opt) => (
-              <button key={opt} onClick={() => update('biologicalSex', opt)} style={pillBtn(form.biologicalSex === opt)}>
-                {opt}
-              </button>
-            ))}
+            <TextField
+              ref={ageRef}
+              className="mt-6"
+              label="How old are you?"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              autoComplete="off"
+              maxLength={3}
+              placeholder="e.g. 34"
+              value={form.age}
+              onChange={(e) => update('age', e.target.value.replace(/[^0-9]/g, ''))}
+              onBlur={() => setTouchedAge(true)}
+              error={showAgeError ? 'Please enter an age between 1 and 120.' : ''}
+              inputClassName="max-w-[160px]"
+            />
+
+            <ChoicePills
+              className="mt-6"
+              label="Biological sex"
+              options={['Male', 'Female', 'Other']}
+              value={form.biologicalSex}
+              onChange={(v) => update('biologicalSex', v)}
+            />
           </div>
-        </div>
+        ) : (
+          <div key="more">
+            <h2 className="font-display text-[28px] leading-tight font-semibold tracking-[-0.02em]">Anything else worth knowing?</h2>
+            <p className="mt-1.5 text-[15px] text-muted">All optional. Skip anything you’re not sure about.</p>
 
-        {/* Optional toggle */}
-        <button
-          onClick={() => setShowOptional(!showOptional)}
-          style={{
-            background: 'none', border: 'none', cursor: 'pointer',
-            color: 'rgba(0,170,255,0.4)', fontSize: '12px',
-            letterSpacing: '0.08em', marginBottom: '16px', padding: '0',
-            display: 'flex', alignItems: 'center', gap: '5px',
-          }}
-        >
-          <span style={{ fontSize: '9px', transition: 'transform 0.2s', display: 'inline-block', transform: showOptional ? 'rotate(90deg)' : 'rotate(0deg)' }}>▶</span>
-          add more context
-        </button>
+            <ChoicePills
+              className="mt-6"
+              label="How did the pain start?"
+              optional
+              options={['Sudden', 'Gradual', 'On and off']}
+              value={form.painOnset}
+              onChange={(v) => update('painOnset', v)}
+            />
 
-        {showOptional && (
-          <div style={{ marginBottom: '18px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
-            <div>
-              <label style={{ fontSize: '11px', color: 'rgba(160,200,220,0.5)', display: 'block', marginBottom: '8px', letterSpacing: '0.08em' }}>
-                how did the pain start?
-              </label>
-              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                {['Sudden', 'Gradual', 'On and off'].map((opt) => (
-                  <button key={opt} onClick={() => update('painOnset', opt)} style={pillBtn(form.painOnset === opt)}>
-                    {opt}
-                  </button>
-                ))}
-              </div>
-            </div>
+            <TextField
+              ref={firstOptionalRef}
+              className="mt-6"
+              label="Ongoing health conditions"
+              optional
+              placeholder="e.g. diabetes, arthritis"
+              value={form.chronicConditions}
+              onChange={(e) => update('chronicConditions', e.target.value)}
+            />
 
-            <div>
-              <label style={{ fontSize: '11px', color: 'rgba(160,200,220,0.5)', display: 'block', marginBottom: '6px', letterSpacing: '0.08em' }}>
-                chronic conditions
-              </label>
-              <input
-                value={form.chronicConditions}
-                onChange={(e) => update('chronicConditions', e.target.value)}
-                placeholder="e.g. diabetes, arthritis..."
-                style={inputStyle}
-              />
-            </div>
-
-            <div>
-              <label style={{ fontSize: '11px', color: 'rgba(160,200,220,0.5)', display: 'block', marginBottom: '6px', letterSpacing: '0.08em' }}>
-                current medications
-              </label>
-              <input
-                value={form.medications}
-                onChange={(e) => update('medications', e.target.value)}
-                placeholder="e.g. ibuprofen, metformin..."
-                style={inputStyle}
-              />
-            </div>
+            <TextField
+              className="mt-5"
+              label="Medicines you take"
+              optional
+              placeholder="e.g. ibuprofen, metformin"
+              value={form.medications}
+              onChange={(e) => update('medications', e.target.value)}
+            />
           </div>
         )}
-
-        {/* Submit */}
-        <button
-          onClick={handleSubmit}
-          disabled={!isValid}
-          style={{
-            width: '100%', padding: '13px',
-            background: isValid ? 'rgba(0,100,220,0.18)' : 'transparent',
-            border: `1px solid ${isValid ? 'rgba(0,170,255,0.5)' : 'rgba(0,170,255,0.1)'}`,
-            borderRadius: '10px',
-            color: isValid ? '#7dd4f8' : 'rgba(160,200,220,0.25)',
-            fontSize: '13px', letterSpacing: '0.08em',
-            cursor: isValid ? 'pointer' : 'default',
-            transition: 'all 0.25s',
-            backdropFilter: 'blur(8px)',
-          }}
-        >
-          mark your pain points →
-        </button>
       </div>
-    </div>
+
+      <div className="flex items-center gap-3 border-t border-line px-6 py-4 sm:px-8">
+        {card === 1 && (
+          <Button variant="quiet" onClick={() => setCard(0)} iconLeft={<ArrowLeft size={18} />}>
+            Back
+          </Button>
+        )}
+        <Button
+          type="submit"
+          className="ml-auto min-w-[150px] flex-1 sm:flex-none"
+          disabled={card === 0 && !aboutValid}
+          iconRight={<ArrowRight size={18} />}
+        >
+          {card === 0 ? 'Next' : hasOptional ? 'Continue' : 'Skip for now'}
+        </Button>
+      </div>
+    </form>
   )
 }

@@ -4,6 +4,8 @@ import { useState, useRef, useEffect, useCallback } from 'react'
 import { useVapi } from '@/contexts/VapiContext'
 import { useSession } from '@/contexts/SessionContext'
 import PainPointChip from './PainPointChip'
+import Button, { IconButton, cx } from './Button'
+import { Alert, FileText, Mic, Refresh, Send, Spinner, Stop } from './icons'
 
 const READY_PATTERN = /enough to generate (your|the) report/i
 const MIN_ANSWERS_FOR_REPORT = 2
@@ -128,186 +130,174 @@ export default function ChatPanel({ onReadyForReport }) {
     startVoiceOrText()
   }
 
-  const status = isConnecting ? 'connecting voice…'
-    : inCall ? (isSpeaking ? 'assistant speaking…' : isListening ? 'listening — just talk' : 'voice on')
-    : hasVoice ? 'voice off — type, or tap the mic to talk' : 'type your answers'
+  const status = isConnecting ? 'Connecting voice…'
+    : inCall ? (isSpeaking ? 'Assistant is speaking' : isListening ? 'Listening — just talk' : 'Voice is on')
+    : hasVoice ? 'Voice off · type, or tap the mic to talk' : 'Type your answers below'
+  const canSend = Boolean(inputText.trim()) && !isTyping
+  const showDone = answers >= MIN_ANSWERS_FOR_REPORT || readyPending
 
   return (
-    <div style={{
-      display: 'flex', flexDirection: 'column', height: '100%',
-      background: 'rgba(3,10,22,0.92)',
-      borderLeft: '1px solid rgba(0,170,255,0.1)',
-    }}>
-      {painPoints.length > 0 && (
-        <div style={{
-          padding: '10px 130px 8px 14px',
-          borderBottom: '1px solid rgba(0,170,255,0.08)',
-          display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center',
-          minHeight: '46px',
-        }}>
-          {painPoints.map((p) => (
-            <PainPointChip key={p.region} region={p.region} />
-          ))}
+    <div className="flex min-h-0 flex-1 flex-col">
+      {/* Header */}
+      <div className="chat-header shrink-0 border-b border-line px-5 pb-3 pt-4 sm:px-7 sm:pt-6">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h2 className="font-display text-[22px] leading-tight font-semibold tracking-[-0.02em] sm:text-[26px]">Let’s talk it through</h2>
+            <p className="mt-0.5 hidden text-sm text-muted sm:block">A few short questions about your pain.</p>
+          </div>
+          <span
+            role="status"
+            className={cx(
+              'mt-1 inline-flex shrink-0 items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold',
+              inCall ? 'bg-teal-soft text-teal' : isConnecting ? 'bg-marigold-soft text-warn' : 'bg-cream-deep text-muted',
+            )}
+          >
+            <span className={cx('size-2 rounded-full', inCall ? 'bg-teal' : isConnecting ? 'animate-pulse bg-marigold' : 'bg-muted', inCall && isListening && 'animate-pulse')} />
+            <span className="max-w-[150px] truncate sm:max-w-none">{inCall ? (isSpeaking ? 'Speaking' : isListening ? 'Listening' : 'Voice on') : isConnecting ? 'Connecting' : 'Text mode'}</span>
+          </span>
         </div>
-      )}
+        {painPoints.length > 0 && (
+          <div className="-mx-1 mt-3 flex gap-1.5 overflow-x-auto px-1 pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            {painPoints.map((p) => (
+              <PainPointChip key={p.region} region={p.region} size="sm" />
+            ))}
+          </div>
+        )}
+      </div>
 
-      <div style={{
-        flex: 1, overflowY: 'auto', padding: '16px 14px',
-        display: 'flex', flexDirection: 'column', gap: '10px',
-        minHeight: '180px',
-      }}>
-        {chatHistory.length === 0 && (
-          <div style={{
-            textAlign: 'center', color: 'rgba(90,144,176,0.5)', fontSize: '13px',
-            marginTop: '28px', fontStyle: 'italic', fontWeight: 300,
-          }}>
-            {isConnecting ? 'connecting to your assistant…' : 'starting your assessment…'}
+      {/* Messages */}
+      <div className="chat-messages scrollbar-soft flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 py-5 sm:px-6" aria-live="polite">
+        {chatHistory.length === 0 && !isTyping && (
+          <div className="m-auto flex flex-col items-center gap-3 text-center text-sm text-muted">
+            <Spinner size={22} className="text-teal" />
+            {isConnecting ? 'Connecting to your assistant…' : 'Getting your first question ready…'}
           </div>
         )}
 
-        {chatHistory.map((msg, i) => (
-          <div key={i} style={{
-            display: 'flex',
-            justifyContent: msg.role === 'user' ? 'flex-end' : 'flex-start',
-          }}>
-            <div style={{
-              maxWidth: '82%',
-              padding: '9px 13px',
-              borderRadius: msg.role === 'user' ? '14px 14px 3px 14px' : '14px 14px 14px 3px',
-              background: msg.role === 'user' ? 'rgba(0,60,140,0.3)' : 'rgba(0,20,50,0.5)',
-              border: msg.role === 'user' ? '1px solid rgba(0,170,255,0.2)' : '1px solid rgba(0,170,255,0.08)',
-              color: msg.role === 'user' ? '#bde0fa' : '#8fc4de',
-              fontSize: '14px', lineHeight: '1.55', fontWeight: 300,
-              overflowWrap: 'anywhere',
-            }}>
-              {msg.content}
+        {chatHistory.map((msg, i) => {
+          const mine = msg.role === 'user'
+          return (
+            <div key={i} className={cx('flex items-end gap-2', mine ? 'justify-end' : 'justify-start')}>
+              {!mine && (
+                <span aria-hidden="true" className="mb-0.5 size-7 shrink-0 rounded-full bg-peach" />
+              )}
+              <div
+                className={cx(
+                  'max-w-[82%] px-4 py-2.5 text-[15px] leading-relaxed [overflow-wrap:anywhere]',
+                  mine
+                    ? 'rounded-[20px] rounded-br-md bg-teal text-white'
+                    : 'rounded-[20px] rounded-bl-md bg-peach-soft text-ink',
+                )}
+              >
+                <span className="sr-only">{mine ? 'You: ' : 'Assistant: '}</span>
+                {msg.content}
+              </div>
             </div>
-          </div>
-        ))}
+          )
+        })}
 
         {isTyping && (
-          <div style={{ display: 'flex', gap: '5px', padding: '6px 2px', alignItems: 'center' }}>
-            {[0, 1, 2].map(i => (
-              <span key={i} style={{
-                width: '6px', height: '6px', borderRadius: '50%',
-                background: '#00aaff', opacity: 0.5,
-                animation: `bounce 1.2s ${i * 0.2}s ease-in-out infinite`,
-              }} />
-            ))}
+          <div className="flex items-end gap-2" aria-label="Assistant is typing">
+            <span aria-hidden="true" className="mb-0.5 size-7 shrink-0 rounded-full bg-peach" />
+            <div className="flex h-10 items-center gap-1.5 rounded-[20px] rounded-bl-md bg-peach-soft px-4">
+              {[0, 1, 2].map((i) => (
+                <span key={i} className="size-2 animate-bob rounded-full bg-peach" style={{ animationDelay: `${i * 0.15}s` }} />
+              ))}
+            </div>
           </div>
         )}
 
         {textError && (
-          <div style={{ fontSize: '12px', color: '#f87171' }}>
-            {textError}{' '}
-            <button
-              onClick={() => fetchReply(historyRef.current)}
-              style={{ background: 'none', border: 'none', color: '#7dd4f8', cursor: 'pointer', textDecoration: 'underline', padding: 0, fontSize: '12px' }}
-            >
-              retry
-            </button>
+          <div role="alert" className="flex items-center gap-3 rounded-2xl bg-pain-soft px-4 py-3 text-sm text-pain-ink">
+            <Alert size={18} className="shrink-0" />
+            <span className="flex-1">{textError}</span>
+            <Button size="sm" variant="secondary" onClick={() => fetchReply(historyRef.current)} iconLeft={<Refresh size={15} />}>
+              Retry
+            </Button>
           </div>
         )}
 
         <div ref={messagesEndRef} />
       </div>
 
-      {(answers >= MIN_ANSWERS_FOR_REPORT || readyPending) && (
-        <div style={{ padding: '8px 14px', borderTop: '1px solid rgba(0,170,255,0.08)' }}>
-          <button
+      {/* Composer */}
+      <div className="chat-composer shrink-0 border-t border-line bg-white px-4 pb-4 pt-3 sm:px-6">
+        {showDone && (
+          <Button
+            block
+            className="mb-3 "
+            variant={readyPending ? 'primary' : 'soft'}
+            loading={readyPending}
             onClick={() => onReadyForReport?.()}
-            style={{
-              width: '100%', padding: '11px',
-              background: readyPending ? 'rgba(0,100,220,0.25)' : 'rgba(0,60,160,0.12)',
-              border: `1px solid ${readyPending ? 'rgba(0,170,255,0.6)' : 'rgba(0,170,255,0.3)'}`,
-              borderRadius: '8px',
-              color: '#7dd4f8', fontSize: '12px', letterSpacing: '0.08em',
-              cursor: 'pointer', transition: 'all 0.2s',
-            }}
+            iconRight={readyPending ? null : <FileText size={18} />}
           >
-            {readyPending ? 'preparing your report…' : "i'm done — generate report →"}
-          </button>
-        </div>
-      )}
-
-      <div style={{
-        padding: '6px 16px 0', fontSize: '10px', letterSpacing: '0.1em',
-        color: inCall ? 'rgba(0,208,255,0.6)' : 'rgba(160,200,220,0.4)',
-        fontFamily: 'monospace',
-      }}>
-        {status}
-      </div>
-
-      <div style={{
-        padding: '8px 14px 14px',
-        display: 'flex', gap: '8px', alignItems: 'center',
-      }}>
-        {hasVoice && (
-          <button
-            type="button"
-            onClick={handleMicClick}
-            title={inCall || isConnecting ? 'Turn voice off' : 'Talk to the assistant'}
-            aria-label={inCall || isConnecting ? 'Turn voice off' : 'Talk to the assistant'}
-            style={{
-              width: '34px', height: '34px', borderRadius: '50%', flexShrink: 0,
-              background: inCall ? 'rgba(0,208,255,0.14)' : 'rgba(0,170,255,0.06)',
-              border: `1px solid ${inCall ? '#00d0ff' : 'rgba(0,170,255,0.25)'}`,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              boxShadow: isListening && inCall ? '0 0 10px rgba(0,208,255,0.45)' : 'none',
-              animation: isListening && inCall ? 'pulse 1.5s ease-in-out infinite' : 'none',
-              cursor: 'pointer', padding: 0, color: '#7dd4f8',
-            }}
-          >
-            {inCall || isConnecting ? (
-              <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><rect x="2" y="2" width="8" height="8" rx="1.5" fill="currentColor" /></svg>
-            ) : (
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
-                <rect x="9" y="3" width="6" height="11" rx="3" />
-                <path d="M5 11a7 7 0 0 0 14 0M12 18v3" />
-              </svg>
-            )}
-          </button>
+            {readyPending ? 'Preparing your report…' : 'I’m done — create my report'}
+          </Button>
         )}
 
-        <input
-          value={inputText}
-          onChange={(e) => setInputText(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder={inCall ? 'or type here…' : 'type your answer'}
-          aria-label="Your answer"
-          style={{
-            flex: 1, minWidth: 0, padding: '9px 12px',
-            background: 'rgba(0,12,28,0.5)',
-            border: '1px solid rgba(0,170,255,0.15)',
-            borderRadius: '8px',
-            color: '#c8e8ff', fontSize: '16px',
-            outline: 'none', fontWeight: 300,
-          }}
-        />
+        <div className="flex items-center gap-2.5">
+          {hasVoice && (
+            <IconButton
+              label={inCall || isConnecting ? 'Turn voice off' : 'Talk instead of typing'}
+              onClick={handleMicClick}
+              aria-pressed={inCall}
+              className={cx(
+                'size-12',
+                inCall
+                  ? 'bg-teal text-white shadow-button'
+                  : isConnecting
+                    ? 'bg-marigold-soft text-warn'
+                    : 'border border-line bg-white text-teal hover:border-teal hover:bg-teal-soft',
+                inCall && isListening && !isSpeaking && '',
+              )}
+            >
+              {isConnecting ? <Spinner size={18} /> : inCall ? (isSpeaking ? <MiniWave /> : <Stop size={18} />) : <Mic size={20} />}
+            </IconButton>
+          )}
 
-        <button
-          onClick={handleSend}
-          disabled={!inputText.trim() || isTyping}
-          style={{
-            padding: '9px 14px',
-            background: inputText.trim() ? 'rgba(0,140,255,0.2)' : 'transparent',
-            border: `1px solid ${inputText.trim() ? 'rgba(0,170,255,0.4)' : 'rgba(0,170,255,0.08)'}`,
-            borderRadius: '8px',
-            color: inputText.trim() ? '#7dd4f8' : 'rgba(160,200,220,0.25)',
-            fontSize: '12px', letterSpacing: '0.06em',
-            cursor: inputText.trim() ? 'pointer' : 'default',
-            transition: 'all 0.2s', flexShrink: 0,
-          }}
-        >
-          send
-        </button>
-      </div>
-
-      {voiceError && (
-        <div style={{ padding: '0 16px 12px', color: '#f87171', fontSize: '11px', fontFamily: 'monospace' }}>
-          {voiceError}
+          <div className="relative min-w-0 flex-1">
+            <input
+              value={inputText}
+              onChange={(e) => setInputText(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder={inCall ? 'Or type here…' : 'Type your answer…'}
+              aria-label="Your answer"
+              className="h-12 w-full rounded-full border border-line bg-cream pl-5 pr-14 text-base text-ink outline-none transition-transform placeholder:text-muted hover:border-teal focus:border-teal focus:bg-white focus:ring-4 focus:ring-teal"
+            />
+            <IconButton
+              label="Send"
+              onClick={handleSend}
+              disabled={!canSend}
+              className={cx(
+                'absolute right-1.5 top-1/2 size-9 -translate-y-1/2 active:scale-95',
+                canSend ? 'bg-teal text-white hover:bg-teal-hover' : 'bg-cream-deep text-muted',
+              )}
+            >
+              <Send size={18} strokeWidth={2.4} />
+            </IconButton>
+          </div>
         </div>
-      )}
+
+        {(hasVoice || inCall) && (
+          <p className={cx('mt-2 px-1 text-xs', inCall ? 'font-medium text-teal' : 'text-muted')}>{status}</p>
+        )}
+
+        {voiceError && (
+          <p role="alert" className="mt-2 flex items-start gap-2 rounded-xl bg-pain-soft px-3 py-2 text-xs text-pain-ink">
+            <Alert size={15} className="mt-px shrink-0" /> {voiceError}
+          </p>
+        )}
+      </div>
     </div>
+  )
+}
+
+function MiniWave() {
+  return (
+    <span aria-hidden="true" className="flex h-4 items-center gap-[3px]">
+      {[0, 1, 2, 3].map((i) => (
+        <span key={i} className="h-4 w-[3px] animate-wave rounded-full bg-current" style={{ animationDelay: `${i * 0.13}s` }} />
+      ))}
+    </span>
   )
 }
